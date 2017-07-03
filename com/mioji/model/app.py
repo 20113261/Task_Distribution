@@ -118,8 +118,8 @@ if __name__ == '__main__':
 
     start = time.time()
     print app.status()
-    for x in range(2):
-        ts = app.get(['hotel'], 100)
+    for x in range(50000):
+        ts = app.get(['hotel'], 600)
         feed_ts = json.loads(json.dumps(ts))
         for t in feed_ts:
             t['error'] = 0 if random.random() > 0.5 else 22

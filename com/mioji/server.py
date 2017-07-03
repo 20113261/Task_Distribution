@@ -47,17 +47,23 @@ class FeedBack(tornado.web.RequestHandler):
     @tornado.web.asynchronous
     @tornado.gen.coroutine
     def get(self):
-        task_info = self.get_argument('q', '').strip()
+        task_info = self.get_argument('q', '[]').strip()
         task_list = json.loads(task_info)
+        yield self.async_get(task_list)
+
+    @tornado.web.asynchronous
+    @tornado.gen.coroutine
+    def post(self):
+        task_info = self.get_argument('q', '[]').strip()
+        task_list = json.loads(task_info)
+        self.write('')
         yield self.async_get(task_list)
 
     @tornado.concurrent.run_on_executor
     def async_get(self, task_list):
-        app.feedback(task_list)
-        self.write('')
+        if task_list:
+            app.feedback(task_list)
 
-    def get_content_size(self):
-        return 1024*1024*10
 
 application = tornado.web.Application([
     (r'/workload', GetTask),
