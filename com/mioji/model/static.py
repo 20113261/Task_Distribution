@@ -10,6 +10,9 @@ five_min_cache = {}
 
 def init_static():
     ps = [task_class.get_package(i) for i in [1, 2, 3]]
+    source_task_count = {}
+    oneday_source_task_count = {}
+
     for p in ps:
         package_static[str(p.id)] = {
             'all': p.task_length,
@@ -17,14 +20,20 @@ def init_static():
             'assigned': 0, 'retry': 0, 'feedback': 0,
             'success': 0, 'error': {}
         }
+        for _id, name in base_value.SOURCE_ID_S.iteritems():
+            source_task_count.setdefault(_id, 0)
+            source_task_count[_id] += p.source_task_length(_id)
+
+            oneday_source_task_count.setdefault(_id, 0)
+            oneday_source_task_count[_id] += p.oneday_source_task_length(_id)
 
     # todo 各种统计
     for c_type in crawl_type.CRAWL_TYPES:
         source_static[c_type] = {}
         for _id, name in base_value.SOURCE_ID_S.iteritems():
             source_static[c_type][str(_id)] = {
-                'all': 0,
-                'oneday': 0,
+                'all': source_task_count.get(_id, 0),
+                'oneday': oneday_source_task_count.get(_id, 0),
                 'assigned': 0, 'retry': 0, 'feedback': 0,
                 'success': 0, 'error': {}
             }

@@ -133,6 +133,12 @@ class Package(object):
     def oneday_task_length(self):
         return self._task_size / self.period_day
 
+    def source_task_length(self, source_id):
+        return self._source_task_size.get(source_id, 0)
+
+    def oneday_source_task_length(self, source_id):
+        return self._source_task_size.get(source_id, 0) / self.period_day
+
 
 class TaskParam(object):
     C_TYPE = crawl_type.T_HOTEL
