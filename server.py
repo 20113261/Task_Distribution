@@ -1,30 +1,25 @@
-#!/usr/bin/python
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# @Time    : 2017/11/29 下午9:01
+# @Author  : Hou Rong
+# @Site    : 
+# @File    : server.py
+# @Software: PyCharm
+# !/usr/bin/python
 # coding=utf-8
-
-import gevent.monkey
-gevent.monkey.patch_all()
-
 import tornado.web
 import tornado.ioloop
 import tornado.httpserver
 import json
 from tornado.options import define
-from com.conf import conf
-import ser_excutor
+from conf import config
 
-import control
-
-from com.mioji.model.app import app
-control.app = app
-
-port = conf.server_port
+port = config.server_port
 define("port", default=port, help="Run server on a specific port", type=int)
 tornado.options.parse_command_line()
 
 
 class GetTask(tornado.web.RequestHandler):
-    executor = ser_excutor.executor_pool
-
     @tornado.web.asynchronous
     @tornado.gen.coroutine
     def get(self):
