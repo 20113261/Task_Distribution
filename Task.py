@@ -3,10 +3,9 @@
 # @Time    : 2017/11/29 下午11:03
 # @Author  : Hou Rong
 # @Site    : 
-# @File    : Task.py
+# @File    : task_script.py
 # @Software: PyCharm
 import json
-import jsonlib
 import time, uuid
 
 
@@ -67,6 +66,9 @@ class Task(object):
     def __str__(self):
         return json.dumps(self.__dict__)
 
+    def dict(self):
+        return self.__dict__
+
     @staticmethod
     def parse(s):
         """
@@ -107,3 +109,10 @@ if __name__ == '__main__':
 
     for k, v in nt.__dict__.items():
         print(k, '->', v)
+
+    print(nt.dict())
+
+    nt = Task.parse('''{"content":"asdasdfasdf","ticket_info":{},"source":"demoListHotel"}''')
+
+    for k, v in nt.dict().items():
+        print(k, v)
