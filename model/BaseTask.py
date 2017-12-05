@@ -3,7 +3,7 @@
 # @Time    : 2017/11/30 下午4:43
 # @Author  : Hou Rong
 # @Site    : 
-# @File    : MasterBaseTask.py
+# @File    : BaseTask.py
 # @Software: PyCharm
 import logging
 import copy
@@ -13,7 +13,7 @@ from model.TaskType import TaskType
 logger = logging.getLogger("MasterTask")
 
 
-class MasterBaseTask(object):
+class BaseTask(object):
     def __init__(self, source, package_id, task_type: TaskType, **kwargs):
         # 任务基础信息
         self.source = source
@@ -55,24 +55,11 @@ class MasterBaseTask(object):
         return tmp_res
 
 
-class MasterTask(MasterBaseTask):
-    def __init__(self, source, date_index, **kwargs):
-        super().__init__(source, **kwargs)
-        self.date_index = date_index
-        self.date = self.generate_date()
-
-        self.task_args['date'] = self.date
-
-    def generate_date(self):
-        # todo generate date
-        return self.date_index
-
-
 if __name__ == '__main__':
-    t = MasterBaseTask('bookingListHotel')
+    t = BaseTask('bookingListHotel')
     print(t.task_args, t.generate_tid())
     print(t.task_args, t.generate_tid())
     t.ticket_info['abc'] = 123123
     print(t.task_args, t.generate_tid())
-    t2 = MasterBaseTask('bookingListHotel', content="12312&a&20170901", ticket_info={'is_new_task': False})
+    t2 = BaseTask('bookingListHotel', content="12312&a&20170901", ticket_info={'is_new_task': False})
     print(t2.task_args, t2.generate_tid())

@@ -14,6 +14,27 @@ class TaskType(enum.IntEnum):
     multi_flight = 2
     hotel = 3
 
+    @staticmethod
+    def parse_str(string):
+        if isinstance(string, str):
+            str_name = {
+                'flight': TaskType.flight,
+                'roundflight': TaskType.round_flight,
+                'multiflight': TaskType.multi_flight,
+                'hotel': TaskType.hotel
+            }
+
+            _res = str_name.get(string.lower())
+            if not _res:
+                raise TypeError("Unknown Enum: {}".format(string))
+            else:
+                return _res
+
+        else:
+            raise TypeError("Unknown Attr Type: {}".format(type(string)))
+
 
 if __name__ == '__main__':
     print(TaskType.flight)
+    print(TaskType(1))
+    print(TaskType.parse_str("HOTEL"))
