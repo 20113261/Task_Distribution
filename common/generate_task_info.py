@@ -12,38 +12,39 @@ from itertools import combinations
 
 logger = get_logger("generate_base_task")
 
-flight_source = ['orbitzFlight', 'ebookersFlight', 'cheapticketsFlight', 'expediaFlight', 'travelocityFlight',
-                 'tripstaFlight', 'pricelineFlight']
 
-flightSource = {'orbitzFlight': 'ebookersFlight', 'ebookersFlight': 'cheapticketsFlight',
-                'cheapticketsFlight': 'expediaFlight', 'expediaFlight': 'travelocityFlight',
-                'travelocityFlight': 'ctripFlightRoutine', 'ctripFlightRoutine': 'tripstaFlight',
-                'tripstaFlight': 'pricelineFlight', 'pricelineFlight': 'orbitzFlight'}
-
-roundflight_source = ['cleartripRoundFlight', 'cheapticketsRoundFlight', 'orbitzRoundFlight', 'ebookersRoundFlight',
-                      'pricelineRoundFlight']
-
-roundflightsource = {'cleartripRoundFlight': 'cheapticketsRoundFlight', 'cheapticketsRoundFlight': 'orbitzRoundFlight',
-                     'orbitzRoundFlight': 'ebookersRoundFlight', 'ebookersRoundFlight': 'pricelineRoundFlight',
-                     'pricelineRoundFlight': 'cleartripRoundFlight'}
-
-train_source = ['ctripRail']
-bus_source = ['megabusUSBus']
-
-hotel_sopurce = ['expediaListHotel', 'hotelsListHotel', 'bookingListHotel', 'elongListHotel', 'agodaListHotel',
-                 'ctripTWHotel']
-
-multiflight_source = ['cleartripMultiFlight', 'orbitzMultiFlight', 'travelocityMultiFlight', 'cheapticketsMultiFlight',
-                      'expediaMultiFlight']
-
-type_data = {
-    'flight': flight_source,
-    'roundflight': roundflight_source,
-    'hotel': hotel_sopurce,
-    'multiflight': multiflight_source,
-    'bus': bus_source,
-    'train': train_source
-}
+# flight_source = ['orbitzFlight', 'ebookersFlight', 'cheapticketsFlight', 'expediaFlight', 'travelocityFlight',
+#                  'tripstaFlight', 'pricelineFlight']
+#
+# flightSource = {'orbitzFlight': 'ebookersFlight', 'ebookersFlight': 'cheapticketsFlight',
+#                 'cheapticketsFlight': 'expediaFlight', 'expediaFlight': 'travelocityFlight',
+#                 'travelocityFlight': 'ctripFlightRoutine', 'ctripFlightRoutine': 'tripstaFlight',
+#                 'tripstaFlight': 'pricelineFlight', 'pricelineFlight': 'orbitzFlight'}
+#
+# roundflight_source = ['cleartripRoundFlight', 'cheapticketsRoundFlight', 'orbitzRoundFlight', 'ebookersRoundFlight',
+#                       'pricelineRoundFlight']
+#
+# roundflightsource = {'cleartripRoundFlight': 'cheapticketsRoundFlight', 'cheapticketsRoundFlight': 'orbitzRoundFlight',
+#                      'orbitzRoundFlight': 'ebookersRoundFlight', 'ebookersRoundFlight': 'pricelineRoundFlight',
+#                      'pricelineRoundFlight': 'cleartripRoundFlight'}
+#
+# train_source = ['ctripRail']
+# bus_source = ['megabusUSBus']
+#
+# hotel_sopurce = ['expediaListHotel', 'hotelsListHotel', 'bookingListHotel', 'elongListHotel', 'agodaListHotel',
+#                  'ctripTWHotel']
+#
+# multiflight_source = ['cleartripMultiFlight', 'orbitzMultiFlight', 'travelocityMultiFlight', 'cheapticketsMultiFlight',
+#                       'expediaMultiFlight']
+#
+# type_data = {
+#     'flight': flight_source,
+#     'roundflight': roundflight_source,
+#     'hotel': hotel_sopurce,
+#     'multiflight': multiflight_source,
+#     'bus': bus_source,
+#     'train': train_source
+# }
 
 
 def generate_flight_base_task_info():
@@ -212,7 +213,7 @@ WHERE (city.id = airport.belong_city_id) AND airport.status = 'Open' AND city.co
                             v1['iata_code'],
                             v2['iata_code'],
                             package_id,
-                            flight_source[static_i % len(flight_source)]
+                            # flight_source[static_i % len(flight_source)]
                         ]
                     )
 
@@ -220,7 +221,13 @@ WHERE (city.id = airport.belong_city_id) AND airport.status = 'Open' AND city.co
                 if (v2['iata_code'], v1['iata_code']) not in judge_data:
                     judge_data.add((v2['iata_code'], v1['iata_code']))
                     data.append(
-                        [v2['iata_code'], v1['iata_code'], package_id, flight_source[static_i % len(flight_source)]])
+                        [
+                            v2['iata_code'],
+                            v1['iata_code'],
+                            package_id,
+                            # flight_source[static_i % len(flight_source)]
+                        ]
+                    )
 
         logger.info("[package_id: {}][rank {} finished]".format(package_id, report_key))
 
@@ -343,7 +350,7 @@ WHERE (city.id = airport.belong_city_id) AND airport.status = 'Open' AND city.co
                             v1['iata_code'],
                             v2['iata_code'],
                             package_id,
-                            roundflight_source[static_i % len(roundflight_source)],
+                            # roundflight_source[static_i % len(roundflight_source)],
                             v2["continent_id"]
                         ]
                     )

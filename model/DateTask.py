@@ -5,26 +5,28 @@
 # @Site    : 
 # @File    : BaseTask.py
 # @Software: PyCharm
+import logging
 import copy
 from toolbox.Hash import get_token
 from model.TaskType import TaskType
 
+logger = logging.getLogger("MasterTask")
+
 
 class BaseTask(object):
-    def __init__(self, package_id, task_type: TaskType, **kwargs):
+    def __init__(self, source, package_id, task_type: TaskType, **kwargs):
         # 任务基础信息
+        self.source = source
         self.package_id = package_id
         self.task_type = task_type
 
         self.task_args = {
+            'source': self.source,
             'content': kwargs.get('content', ''),
             'ticket_info': kwargs.get('ticket_info', {})
         }
         if task_type == TaskType.round_flight:
             self.task_args['continent_id'] = kwargs['continent_id']
-
-        if task_type == TaskType.hotel:
-            self.task_args['source'] = kwargs['source']
 
         # 任务状态信息
         self.is_new_task = kwargs.get('is_new_task', False)
@@ -34,7 +36,12 @@ class BaseTask(object):
         self.tid = self.generate_tid()
 
     def generate_tid(self):
-        return get_token(self.task_args)
+        if self.task_type in (TaskType.flight, TaskType.round_flight):
+            # 飞机列表页任务，每个源只发一个任务
+            tmp_args = copy.deepcopy(self.task_args)
+            if 'source' in tmp_args:
+                tmp_args.pop('source')
+            return get_token(tmp_args)
 
     @staticmethod
     def ignore_key():

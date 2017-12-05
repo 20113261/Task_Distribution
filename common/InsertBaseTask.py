@@ -10,7 +10,7 @@ import mock
 import common.patched_mongo_insert
 from model.TaskType import TaskType
 from logger import get_logger
-from model.MasterBaseTask import MasterBaseTask
+from model.BaseTask import BaseTask
 from common.generate_task_info import generate_hotel_base_task_info, generate_flight_base_task_info, \
     generate_round_flight_base_task_info
 
@@ -18,7 +18,7 @@ INSERT_WHEN = 2000
 
 
 class BaseTaskList(list):
-    def append_task(self, task: MasterBaseTask):
+    def append_task(self, task: BaseTask):
         self.append(task.to_dict())
 
 
@@ -38,7 +38,7 @@ class InsertBaseTask(object):
         # 数据游标前置偏移量，用于在入库时恢复游标位置
         self.pre_offset = 0
 
-        client = pymongo.MongoClient(host='10.10.231.105')
+        client = pymongo.MongoClient(host='10.10.213.148')
         self.db = client['RoutineBaseTask']
 
         self.tasks = BaseTaskList()
@@ -85,7 +85,7 @@ class InsertBaseTask(object):
 
     def _insert_task(self, args: dict):
         if isinstance(args, dict):
-            __t = MasterBaseTask(**args)
+            __t = BaseTask(**args)
             self.tasks.append_task(__t)
             self.pre_offset += 1
 
@@ -97,24 +97,24 @@ class InsertBaseTask(object):
 
     def insert_task(self):
         if self.task_type == TaskType.flight:
-            for dept, dest, package_id, source in generate_flight_base_task_info():
+            for dept, dest, package_id in generate_flight_base_task_info():
                 content = "{}&{}&".format(dept, dest)
                 self._insert_task(
                     {
                         'content': content,
                         'package_id': package_id,
-                        'source': source,
+                        # 'source': source,
                         'task_type': self.task_type
                     }
                 )
         elif self.task_type == TaskType.round_flight:
-            for dept, dest, package_id, source, continent_id in generate_round_flight_base_task_info():
+            for dept, dest, package_id, continent_id in generate_round_flight_base_task_info():
                 content = "{}&{}&".format(dept, dest)
                 self._insert_task(
                     {
                         'content': content,
                         'package_id': package_id,
-                        'source': source,
+                        # 'source': source,
                         'task_type': self.task_type,
                         'continent_id': continent_id
                     }
