@@ -208,7 +208,13 @@ WHERE (city.id = airport.belong_city_id) AND airport.status = 'Open' AND city.co
                 if (v1['iata_code'], v2['iata_code']) not in judge_data:
                     judge_data.add((v1['iata_code'], v2['iata_code']))
                     data.append(
-                        [v1['iata_code'], v2['iata_code'], package_id, flight_source[static_i % len(flight_source)]])
+                        [
+                            v1['iata_code'],
+                            v2['iata_code'],
+                            package_id,
+                            flight_source[static_i % len(flight_source)]
+                        ]
+                    )
 
                 # 返程
                 if (v2['iata_code'], v1['iata_code']) not in judge_data:
@@ -218,8 +224,7 @@ WHERE (city.id = airport.belong_city_id) AND airport.status = 'Open' AND city.co
 
         logger.info("[package_id: {}][rank {} finished]".format(package_id, report_key))
 
-    for each in data:
-        yield each
+    yield from data
 
 
 def generate_round_flight_base_task_info():
@@ -308,51 +313,44 @@ WHERE (city.id = airport.belong_city_id) AND airport.status = 'Open' AND city.co
 
     logger.info("[rank dict finished]")
 
-    rank1_items = list(rank1.items())
-    rank2_items = list(rank2.items())
-    rank3_items = list(rank3.items())
-    rank4_items = list(rank4.items())
+    target_data = [
+        # rank0 1-3
+        ("1-3", rank1, rank3, 12),
+
+        # rank1 1-4, 2-3
+        ("1-4", rank1, rank4, 13),
+        ("2-3", rank2, rank3, 13),
+
+        # rank2 3-3, 3-4
+        ("2-4", rank2, rank4, 14),
+    ]
 
     data = []
-    judge_data = []
-    for r1_item in rank1_items:
-        for r2_item in rank3_items:
-            static_i += 1
-            if r1_item[1]['iata_code'] + r2_item[1]['iata_code'] not in judge_data:
-                judge_data.append(r1_item[1]['iata_code'] + r2_item[1]['iata_code'])
-                data.append([r1_item[1]['iata_code'], r2_item[1]['iata_code'], 12,
-                             roundflight_source[static_i % len(roundflight_source)], r2_item[1]["continent_id"]])
-    logger.info("[rank 1-3 finished]")
+    judge_data = set()
 
-    for r1_item in rank1_items:
-        for r2_item in rank4_items:
-            static_i += 1
-            if r1_item[1]['iata_code'] + r2_item[1]['iata_code'] not in judge_data:
-                judge_data.append(r1_item[1]['iata_code'] + r2_item[1]['iata_code'])
-                data.append([r1_item[1]['iata_code'], r2_item[1]['iata_code'], 13,
-                             roundflight_source[static_i % len(roundflight_source)], r2_item[1]["continent_id"]])
-    logger.info("[rank 1-4 finished]")
+    for report_key, first_rank, last_rank, package_id in target_data:
+        for v1 in first_rank.values():
+            for v2 in last_rank.values():
+                if v1['iata_code'] == v2['iata_code']:
+                    # iata_code 相同时过滤
+                    continue
+                static_i += 1
 
-    for r1_item in rank2_items:
-        for r2_item in rank3_items:
-            static_i += 1
-            if r1_item[1]['iata_code'] + r2_item[1]['iata_code'] not in judge_data:
-                judge_data.append(r1_item[1]['iata_code'] + r2_item[1]['iata_code'])
-                data.append([r1_item[1]['iata_code'], r2_item[1]['iata_code'], 13,
-                             roundflight_source[static_i % len(roundflight_source)], r2_item[1]["continent_id"]])
-    logger.info("[rank 2-3 finished]")
+                if (v1['iata_code'], v2['iata_code']) not in judge_data:
+                    judge_data.add((v1['iata_code'], v2['iata_code']))
+                    data.append(
+                        [
+                            v1['iata_code'],
+                            v2['iata_code'],
+                            package_id,
+                            roundflight_source[static_i % len(roundflight_source)],
+                            v2["continent_id"]
+                        ]
+                    )
 
-    for r1_item in rank2_items:
-        for r2_item in rank4_items:
-            static_i += 1
-            if r1_item[1]['iata_code'] + r2_item[1]['iata_code'] not in judge_data:
-                judge_data.append(r1_item[1]['iata_code'] + r2_item[1]['iata_code'])
-                data.append([r1_item[1]['iata_code'], r2_item[1]['iata_code'], 14,
-                             roundflight_source[static_i % len(roundflight_source)], r2_item[1]["continent_id"]])
-    logger.info("[rank 2-4 finished]")
+        logger.info("[package_id: {}][rank {} finished]".format(package_id, report_key))
 
-    for each_data in data:
-        yield each_data
+    yield from data
 
 
 # todo rail 的内容可能需要修改，当前依赖 ctrip_rail_table 发的任务的
@@ -448,7 +446,7 @@ if __name__ == '__main__':
     # for line in generate_flight_base_task_info():
     #     _count += 1
     #     print(line)
-    
+
     # print(_count)
 
     '''

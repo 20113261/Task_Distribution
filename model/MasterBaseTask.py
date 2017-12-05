@@ -19,14 +19,14 @@ class MasterBaseTask(object):
         self.source = source
         self.package_id = package_id
         self.task_type = task_type
-        self.content = kwargs.get('content', '')
-        self.ticket_info = kwargs.get('ticket_info', {})
 
         self.task_args = {
             'source': self.source,
-            'content': self.content,
-            'ticket_info': self.ticket_info
+            'content': kwargs.get('content', ''),
+            'ticket_info': kwargs.get('ticket_info', {})
         }
+        if task_type == TaskType.round_flight:
+            self.task_args['continent_id'] = kwargs['continent_id']
 
         # 任务状态信息
         self.is_new_task = kwargs.get('is_new_task', False)
@@ -36,7 +36,7 @@ class MasterBaseTask(object):
         self.tid = self.generate_tid()
 
     def generate_tid(self):
-        if self.task_type == TaskType.flight:
+        if self.task_type in (TaskType.flight, TaskType.round_flight):
             # 飞机列表页任务，每个源只发一个任务
             tmp_args = copy.deepcopy(self.task_args)
             if 'source' in tmp_args:

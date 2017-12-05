@@ -48,11 +48,12 @@ class InsertBaseTask(object):
 
     def create_mongo_indexes(self):
         collections = self.db[self.collection_name]
+        collections.create_index([('package_id', 1)])
         collections.create_index([('tid', 1)], unique=True)
         self.logger.info("[完成索引建立]")
 
     def generate_collection_name(self):
-        return "BaseTask{}".format(str(self.task_type).split('.')[-1].title())
+        return "BaseTask_{}".format(str(self.task_type).split('.')[-1].title())
 
     def mongo_patched_insert(self, data):
         collections = self.db[self.collection_name]
@@ -107,14 +108,15 @@ class InsertBaseTask(object):
                     }
                 )
         elif self.task_type == TaskType.round_flight:
-            for dept, dest, package_id, source in generate_round_flight_base_task_info():
+            for dept, dest, package_id, source, continent_id in generate_round_flight_base_task_info():
                 content = "{}&{}&".format(dept, dest)
                 self._insert_task(
                     {
                         'content': content,
                         'package_id': package_id,
                         'source': source,
-                        'task_type': self.task_type
+                        'task_type': self.task_type,
+                        'continent_id': continent_id
                     }
                 )
         elif self.task_type == TaskType.hotel:
@@ -133,5 +135,5 @@ class InsertBaseTask(object):
 if __name__ == '__main__':
     # with InsertBaseTask(task_type=TaskType.flight) as insert_task:
     #     insert_task.insert_task()
-    insert_task = InsertBaseTask(task_type=TaskType.flight)
+    insert_task = InsertBaseTask(task_type=TaskType.round_flight)
     insert_task.insert_task()
