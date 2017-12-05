@@ -52,7 +52,7 @@ class InsertBaseTask(object):
         self.logger.info("[完成索引建立]")
 
     def generate_collection_name(self):
-        return "BaseTask".format(str(self.task_type).split('.')[-1].upper())
+        return "BaseTask{}".format(str(self.task_type).split('.')[-1].title())
 
     def mongo_patched_insert(self, data):
         collections = self.db[self.collection_name]
@@ -95,18 +95,31 @@ class InsertBaseTask(object):
             raise TypeError('错误的 args 类型 < {0} >'.format(type(args).__name__))
 
     def insert_task(self):
-        f = open('/tmp/test/test_2', 'w')
         if self.task_type == TaskType.flight:
             for dept, dest, package_id, source in generate_flight_base_task_info():
                 content = "{}&{}&".format(dept, dest)
-                f.write("{}\t{}\t{}\n".format(source, content, package_id))
                 self._insert_task(
                     {
                         'content': content,
                         'package_id': package_id,
-                        'source': source
+                        'source': source,
+                        'task_type': self.task_type
                     }
                 )
+        elif self.task_type == TaskType.round_flight:
+            for dept, dest, package_id, source in generate_round_flight_base_task_info():
+                content = "{}&{}&".format(dept, dest)
+                self._insert_task(
+                    {
+                        'content': content,
+                        'package_id': package_id,
+                        'source': source,
+                        'task_type': self.task_type
+                    }
+                )
+        elif self.task_type == TaskType.hotel:
+            pass
+        # 最终剩余数据入库
         if len(self.tasks) > 0:
             self.insert_mongo()
 

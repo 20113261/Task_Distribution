@@ -298,13 +298,13 @@ WHERE (city.id = airport.belong_city_id) AND airport.status = 'Open' AND city.co
                 'iata_code']:
                 if r1_item[1]['iata_code'] + r2_item[1]['iata_code'] not in judge_data:
                     judge_data.append(r1_item[1]['iata_code'] + r2_item[1]['iata_code'])
-                    data.append([r1_item[1]['iata_code'], r2_item[1]['iata_code'], 4, 'tripstaFlight'])
-                    data.append([r1_item[1]['iata_code'], r2_item[1]['iata_code'], 4, 'pricelineFlight'])
+                    data.append([r1_item[1]['iata_code'], r2_item[1]['iata_code'], 4,
+                                 flight_source[static_i % len(flight_source)]])
                     write_data.append((r1_item[1]['city_id'], r2_item[1]['city_id'], 4))
                 if r2_item[1]['iata_code'] + r1_item[1]['iata_code'] not in judge_data:
                     judge_data.append(r2_item[1]['iata_code'] + r1_item[1]['iata_code'])
-                    data.append([r2_item[1]['iata_code'], r1_item[1]['iata_code'], 4, 'tripstaFlight'])
-                    data.append([r2_item[1]['iata_code'], r1_item[1]['iata_code'], 4, 'pricelineFlight'])
+                    data.append([r2_item[1]['iata_code'], r1_item[1]['iata_code'], 4,
+                                 flight_source[static_i % len(flight_source)]])
                     write_data.append((r2_item[1]['city_id'], r1_item[1]['city_id'], 4))
 
     logger.info("[rank 6-3 finished]")
