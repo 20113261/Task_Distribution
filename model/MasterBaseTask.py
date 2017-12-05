@@ -6,15 +6,17 @@
 # @File    : MasterBaseTask.py
 # @Software: PyCharm
 import logging
+import copy
 from toolbox.Hash import get_token
 
 logger = logging.getLogger("MasterTask")
 
 
 class MasterBaseTask(object):
-    def __init__(self, source, **kwargs):
+    def __init__(self, source, package_id, **kwargs):
         # 任务基础信息
         self.source = source
+        self.package_id = package_id
         self.content = kwargs.get('content', '')
         self.ticket_info = kwargs.get('ticket_info', {})
 
@@ -28,8 +30,22 @@ class MasterBaseTask(object):
         self.is_new_task = kwargs.get('is_new_task', False)
         self.has_update_date = kwargs.get('has_update_date', False)
 
+        # 生成任务 id
+        self.tid = self.generate_tid()
+
     def generate_tid(self):
         return get_token(self.task_args)
+
+    @staticmethod
+    def ignore_key():
+        return ['content', 'ticket_info']
+
+    def to_dict(self):
+        tmp_res = copy.deepcopy(self.__dict__)
+        for key in self.ignore_key():
+            if hasattr(tmp_res, key):
+                tmp_res.__delattr__(key)
+        return tmp_res
 
 
 class MasterTask(MasterBaseTask):

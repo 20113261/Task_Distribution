@@ -551,8 +551,11 @@ if __name__ == '__main__':
     FlightTasks
     BJS&PAR&20171201
     '''
-    # for line in generate_flight_base_task_info():
-    #     print(line)
+    _count = 0
+    for line in generate_flight_base_task_info():
+        _count += 1
+        print(line)
+    print(_count)
 
     '''
     RoundFlightTasks
@@ -564,9 +567,9 @@ if __name__ == '__main__':
     '''
     HotelTasks
     '''
-    _count = 0
-    for line in generate_hotel_base_task_info():
-        _count += 1
-        if _count == 100:
-            break
-        print(line)
+    # _count = 0
+    # for line in generate_hotel_base_task_info():
+    #     _count += 1
+    #     if _count == 100:
+    #         break
+    #     print(line)
