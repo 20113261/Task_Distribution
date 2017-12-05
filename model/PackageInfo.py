@@ -6,6 +6,7 @@
 # @File    : PackageInfo.py
 # @Software: PyCharm
 import pymongo
+import json
 from conf import config
 from cachetools.func import ttl_cache
 from model.TaskType import TaskType
@@ -13,29 +14,15 @@ from collections import defaultdict
 
 
 class PackageId(object):
-    def __init__(self, package_id, task_type: TaskType, update_cycle):
-        self.__package_id = -1
-        self.__update_cycle = -1
+    def __init__(self, package_id, task_type: TaskType, update_cycle, start_date, end_date):
+        self.package_id = int(package_id)
+        self.update_cycle = int(update_cycle)
+        self.start_date = int(start_date)
+        self.end_date = int(end_date)
 
         self.task_type = task_type
         self.package_id = package_id
         self.update_cycle = update_cycle
-
-    @property
-    def package_id(self):
-        return self.__package_id
-
-    @package_id.setter
-    def package_id(self, val):
-        self.__package_id = int(val)
-
-    @property
-    def update_cycle(self):
-        return self.__update_cycle
-
-    @update_cycle.setter
-    def update_cycle(self, val):
-        self.__update_cycle = int(val)
 
     def __eq__(self, other):
         return self.package_id == other.package_id and self.task_type == other.task_type
@@ -47,7 +34,7 @@ class PackageId(object):
             raise TypeError("[diff task type][ {} < {} ]".format(self.task_type, other.task_type))
 
     def __str__(self):
-        return "[task_type: {}][pid: {}][update_cycle: {}]".format(self.task_type, self.package_id, self.update_cycle)
+        return json.dumps(self.__dict__, sort_keys=True)
 
     def __repr__(self):
         return self.__str__()
@@ -59,7 +46,7 @@ class PackageInfo(object):
         self.collection = client[config.mongo_db][config.package_info_collection]
 
     @ttl_cache(maxsize=64, ttl=600)
-    def get_package(self):
+    def get_package(self) -> {int: [PackageId, ]}:
         __dict = defaultdict(list)
         for line in self.collection.find({}):
             package_id = int(line['id'])
@@ -69,7 +56,9 @@ class PackageInfo(object):
                 package = PackageId(
                     package_id=package_id,
                     task_type=task_type,
-                    update_cycle=update_cycle
+                    update_cycle=update_cycle,
+                    start_date=line['daydiff_start'],
+                    end_date=line['daydiff_end']
                 )
                 __dict[task_type].append(package)
         # sort dict
@@ -79,9 +68,9 @@ class PackageInfo(object):
         return __dict
 
 
-if __name__ == '__main__':
-    package_info = PackageInfo()
-    _dict = package_info.get_package()
-
-    for k, v in _dict.items():
-        print(k, '->', v)
+# if __name__ == '__main__':
+#     package_info = PackageInfo()
+#     _dict = package_info.get_package()
+#
+#     for k, v in _dict.items():
+#         print(k, '->', v)
