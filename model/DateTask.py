@@ -3,22 +3,20 @@
 # @Time    : 2017/11/30 下午4:43
 # @Author  : Hou Rong
 # @Site    : 
-# @File    : BaseTask.py
+# @File    : DateTask.py
 # @Software: PyCharm
-import logging
 import copy
 from toolbox.Hash import get_token
 from model.TaskType import TaskType
 
-logger = logging.getLogger("MasterTask")
 
-
-class BaseTask(object):
-    def __init__(self, source, package_id, task_type: TaskType, **kwargs):
+class DateTask(object):
+    def __init__(self, source, package_id, task_type: TaskType, date, **kwargs):
         # 任务基础信息
         self.source = source
         self.package_id = package_id
         self.task_type = task_type
+        self.date = date
 
         self.task_args = {
             'source': self.source,
@@ -53,13 +51,3 @@ class BaseTask(object):
             if hasattr(tmp_res, key):
                 tmp_res.__delattr__(key)
         return tmp_res
-
-
-if __name__ == '__main__':
-    t = BaseTask('bookingListHotel')
-    print(t.task_args, t.generate_tid())
-    print(t.task_args, t.generate_tid())
-    t.ticket_info['abc'] = 123123
-    print(t.task_args, t.generate_tid())
-    t2 = BaseTask('bookingListHotel', content="12312&a&20170901", ticket_info={'is_new_task': False})
-    print(t2.task_args, t2.generate_tid())

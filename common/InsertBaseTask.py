@@ -8,6 +8,7 @@
 import pymongo
 import mock
 import common.patched_mongo_insert
+from conf import config
 from model.TaskType import TaskType
 from logger import get_logger
 from model.BaseTask import BaseTask
@@ -38,8 +39,8 @@ class InsertBaseTask(object):
         # 数据游标前置偏移量，用于在入库时恢复游标位置
         self.pre_offset = 0
 
-        client = pymongo.MongoClient(host='10.10.213.148')
-        self.db = client['RoutineBaseTask']
+        client = pymongo.MongoClient(host=config.mongo_host)
+        self.db = client[config.mongo_db]
 
         self.tasks = BaseTaskList()
 

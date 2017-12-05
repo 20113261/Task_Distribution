@@ -13,6 +13,8 @@ class TaskType(enum.IntEnum):
     round_flight = 1
     multi_flight = 2
     hotel = 3
+    train = 4
+    bus = 5
 
     @staticmethod
     def parse_str(string):
@@ -21,11 +23,13 @@ class TaskType(enum.IntEnum):
                 'flight': TaskType.flight,
                 'roundflight': TaskType.round_flight,
                 'multiflight': TaskType.multi_flight,
-                'hotel': TaskType.hotel
+                'hotel': TaskType.hotel,
+                'train': TaskType.train,
+                'bus': TaskType.bus
             }
 
             _res = str_name.get(string.lower())
-            if not _res:
+            if _res is None:
                 raise TypeError("Unknown Enum: {}".format(string))
             else:
                 return _res
