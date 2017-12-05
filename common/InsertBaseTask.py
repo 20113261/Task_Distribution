@@ -43,6 +43,14 @@ class InsertBaseTask(object):
 
         self.tasks = BaseTaskList()
 
+        # 初始化建立索引
+        self.create_mongo_indexes()
+
+    def create_mongo_indexes(self):
+        collections = self.db[self.collection_name]
+        collections.create_index([('tid', 1)], unique=True)
+        self.logger.info("[完成索引建立]")
+
     def generate_collection_name(self):
         return "BaseTask".format(str(self.task_type).split('.')[-1].upper())
 
@@ -87,11 +95,14 @@ class InsertBaseTask(object):
             raise TypeError('错误的 args 类型 < {0} >'.format(type(args).__name__))
 
     def insert_task(self):
+        f = open('/tmp/test/test_2', 'w')
         if self.task_type == TaskType.flight:
             for dept, dest, package_id, source in generate_flight_base_task_info():
+                content = "{}&{}&".format(dept, dest)
+                f.write("{}\t{}\t{}\n".format(source, content, package_id))
                 self._insert_task(
                     {
-                        'content': "{}&{}&".format(dept, dest),
+                        'content': content,
                         'package_id': package_id,
                         'source': source
                     }

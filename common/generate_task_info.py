@@ -173,9 +173,11 @@ WHERE (city.id = airport.belong_city_id) AND airport.status = 'Open' AND city.co
     rank4_items = list(rank4.items())
     rank5_items = list(rank5.items())
     rank6_items = list(rank6.items())
+
     data = []
     write_data = []
     judge_data = []
+
     for r1_item in rank1_items:
         for r2_item in rank3_items:
             static_i += 1
