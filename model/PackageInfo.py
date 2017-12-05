@@ -14,9 +14,43 @@ from collections import defaultdict
 
 class PackageId(object):
     def __init__(self, package_id, task_type: TaskType, update_cycle):
-        self.package_id = package_id
+        self.__package_id = -1
+        self.__update_cycle = -1
+
         self.task_type = task_type
+        self.package_id = package_id
         self.update_cycle = update_cycle
+
+    @property
+    def package_id(self):
+        return self.__package_id
+
+    @package_id.setter
+    def package_id(self, val):
+        self.__package_id = int(val)
+
+    @property
+    def update_cycle(self):
+        return self.__update_cycle
+
+    @update_cycle.setter
+    def update_cycle(self, val):
+        self.__update_cycle = int(val)
+
+    def __eq__(self, other):
+        return self.package_id == other.package_id and self.task_type == other.task_type
+
+    def __lt__(self, other):
+        if self.task_type == other.task_type:
+            return self.package_id < other.package_id
+        else:
+            raise TypeError("[diff task type][ {} < {} ]".format(self.task_type, other.task_type))
+
+    def __str__(self):
+        return "[task_type: {}][pid: {}][update_cycle: {}]".format(self.task_type, self.package_id, self.update_cycle)
+
+    def __repr__(self):
+        return self.__str__()
 
 
 class PackageInfo(object):
@@ -26,7 +60,7 @@ class PackageInfo(object):
 
     @ttl_cache(maxsize=64, ttl=600)
     def get_package(self):
-        _dict = defaultdict(list)
+        __dict = defaultdict(list)
         for line in self.collection.find({}):
             package_id = int(line['id'])
             task_type = TaskType.parse_str(line['taskType'])
@@ -37,8 +71,12 @@ class PackageInfo(object):
                     task_type=task_type,
                     update_cycle=update_cycle
                 )
-                _dict[task_type].append(package)
-        return _dict
+                __dict[task_type].append(package)
+        # sort dict
+        for k in __dict.keys():
+            __dict[k] = sorted(__dict[k])
+
+        return __dict
 
 
 if __name__ == '__main__':
