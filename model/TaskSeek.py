@@ -3,7 +3,7 @@
 # @Time    : 2017/12/5 下午5:46
 # @Author  : Hou Rong
 # @Site    : 
-# @File    : DateList.py
+# @File    : TaskSeek.py
 # @Software: PyCharm
 import pymongo
 import datetime
@@ -14,7 +14,7 @@ from conf import config
 class TaskSeek(object):
     def __init__(self):
         self.client = pymongo.MongoClient(host=config.mongo_host)
-        self.collections = self.client[config.mongo_db]['TaskSeek']
+        self.collections = self.client[config.mongo_base_task_db]['TaskSeek']
 
         # 建立索引
         self.create_indexes()

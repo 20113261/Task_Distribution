@@ -21,14 +21,11 @@ class DateTask(object):
         self.task_args = {
             'source': self.source,
             'content': kwargs.get('content', ''),
-            'ticket_info': kwargs.get('ticket_info', {})
+            'ticket_info': kwargs.get('ticket_info', {}),
+            'date': date
         }
         if task_type == TaskType.round_flight:
             self.task_args['continent_id'] = kwargs['continent_id']
-
-        # 任务状态信息
-        self.is_new_task = kwargs.get('is_new_task', False)
-        self.has_update_date = kwargs.get('has_update_date', False)
 
         # 生成任务 id
         self.tid = self.generate_tid()

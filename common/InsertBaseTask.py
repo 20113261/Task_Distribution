@@ -40,7 +40,7 @@ class InsertBaseTask(object):
         self.pre_offset = 0
 
         client = pymongo.MongoClient(host=config.mongo_host)
-        self.db = client[config.mongo_db]
+        self.db = client[config.mongo_base_task_db]
 
         self.tasks = BaseTaskList()
 

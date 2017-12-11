@@ -26,10 +26,6 @@ class BaseTask(object):
         if task_type == TaskType.hotel:
             self.task_args['source'] = kwargs['source']
 
-        # 任务状态信息
-        self.is_new_task = kwargs.get('is_new_task', False)
-        self.has_update_date = kwargs.get('has_update_date', False)
-
         # 生成任务 id
         self.tid = self.generate_tid()
 

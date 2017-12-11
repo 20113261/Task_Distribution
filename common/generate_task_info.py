@@ -8,43 +8,8 @@
 from conn_pool import base_data_pool, source_info_pool
 from mysql_execute import fetchall, fetchall_ss
 from logger import get_logger
-from itertools import combinations
 
 logger = get_logger("generate_base_task")
-
-
-# flight_source = ['orbitzFlight', 'ebookersFlight', 'cheapticketsFlight', 'expediaFlight', 'travelocityFlight',
-#                  'tripstaFlight', 'pricelineFlight']
-#
-# flightSource = {'orbitzFlight': 'ebookersFlight', 'ebookersFlight': 'cheapticketsFlight',
-#                 'cheapticketsFlight': 'expediaFlight', 'expediaFlight': 'travelocityFlight',
-#                 'travelocityFlight': 'ctripFlightRoutine', 'ctripFlightRoutine': 'tripstaFlight',
-#                 'tripstaFlight': 'pricelineFlight', 'pricelineFlight': 'orbitzFlight'}
-#
-# roundflight_source = ['cleartripRoundFlight', 'cheapticketsRoundFlight', 'orbitzRoundFlight', 'ebookersRoundFlight',
-#                       'pricelineRoundFlight']
-#
-# roundflightsource = {'cleartripRoundFlight': 'cheapticketsRoundFlight', 'cheapticketsRoundFlight': 'orbitzRoundFlight',
-#                      'orbitzRoundFlight': 'ebookersRoundFlight', 'ebookersRoundFlight': 'pricelineRoundFlight',
-#                      'pricelineRoundFlight': 'cleartripRoundFlight'}
-#
-# train_source = ['ctripRail']
-# bus_source = ['megabusUSBus']
-#
-# hotel_sopurce = ['expediaListHotel', 'hotelsListHotel', 'bookingListHotel', 'elongListHotel', 'agodaListHotel',
-#                  'ctripTWHotel']
-#
-# multiflight_source = ['cleartripMultiFlight', 'orbitzMultiFlight', 'travelocityMultiFlight', 'cheapticketsMultiFlight',
-#                       'expediaMultiFlight']
-#
-# type_data = {
-#     'flight': flight_source,
-#     'roundflight': roundflight_source,
-#     'hotel': hotel_sopurce,
-#     'multiflight': multiflight_source,
-#     'bus': bus_source,
-#     'train': train_source
-# }
 
 
 def generate_flight_base_task_info():

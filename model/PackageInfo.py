@@ -43,7 +43,7 @@ class PackageId(object):
 class PackageInfo(object):
     def __init__(self):
         client = pymongo.MongoClient(host=config.mongo_host)
-        self.collection = client[config.mongo_db][config.package_info_collection]
+        self.collection = client[config.mongo_base_task_db][config.package_info_collection]
 
     @ttl_cache(maxsize=64, ttl=600)
     def get_package(self) -> {int: [PackageId, ]}:

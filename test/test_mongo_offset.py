@@ -8,7 +8,7 @@
 import pymongo
 from conf import config
 
-collections = pymongo.MongoClient(host=config.mongo_host)[config.mongo_db]["BaseTask_Round_Flight"]
+collections = pymongo.MongoClient(host=config.mongo_host)[config.mongo_base_task_db]["BaseTask_Round_Flight"]
 for line in collections.find({}).sort([("_id", 1)]).skip(10).limit(10):
     print(line["_id"])
     '''

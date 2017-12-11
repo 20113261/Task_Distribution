@@ -12,7 +12,8 @@ server_port = 8087
 
 # TaskDB
 mongo_host = '10.10.213.148'
-mongo_db = 'RoutineBaseTask'
+mongo_base_task_db = 'RoutineBaseTask'
+mongo_date_task_db = 'RoutineDateTask'
 
 # TaskCollection
 package_info_collection = 'package_info'
