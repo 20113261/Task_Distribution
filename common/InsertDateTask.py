@@ -7,13 +7,14 @@
 # @Software: PyCharm
 import math
 import mock
+import random
 import pymongo
 import datetime
 import toolbox.Date
 import common.patched_mongo_insert
 from model.TaskType import TaskType
 from logger import get_logger
-from conf import config
+from conf import config, task_source
 from model.PackageInfo import PackageInfo
 from toolbox.Date import date_takes
 from model.DateTask import DateTask
@@ -36,19 +37,26 @@ class InsertDateTask(object):
         self.logger = get_logger("InsertBaseTask")
 
         client = pymongo.MongoClient(host=config.mongo_host)
-        self.db = client[config.mongo_base_task_db]
+        self.base_task_db = client[config.mongo_base_task_db]
+        self.date_task_db = client[config.mongo_date_task_db]
 
-        self.base_collections = self.db[self.generate_base_collections()]
-        self.date_collections = self.db[self.generate_date_collections()]
+        self.base_collections = self.base_task_db[self.generate_base_collections()]
 
-        # 建立索引
-        self.create_indexes()
+        # 按源生成多个 collections, 多个 tasks 队列
+        self.date_collections_dict = {}
+        self.tasks_dict = {}
+        for each_source in self.get_total_source():
+            self.date_collections_dict[each_source] = self.date_task_db[
+                self.generate_date_collections(source=each_source)]
+
+            # 建立索引
+            self.create_indexes(source=each_source)
+
+            # 初始化任务队列
+            self.tasks_dict[each_source] = DateTaskList()
 
         # 初始化 PackageInfo 类
         self.package_info = PackageInfo()
-
-        # 任务队列
-        self.tasks = DateTaskList()
 
         # 数据游标偏移量，用于在查询时发生异常恢复游标位置
         self.offset = 0
@@ -58,11 +66,19 @@ class InsertDateTask(object):
     def generate_base_collections(self):
         return "BaseTask_{}".format(str(self.task_type).split('.')[-1].title())
 
-    def generate_date_collections(self):
-        return "DateTask_{}".format(str(self.task_type).split('.')[-1].title())
+    @staticmethod
+    def today():
+        return datetime.datetime.today().strftime('%Y%m%d')
 
-    def create_indexes(self):
-        collections = self.date_collections
+    def generate_date_collections(self, source):
+        return "DateTask_{}_{}_{}".format(
+            str(self.task_type).split('.')[-1].title(),
+            source,
+            self.today()
+        )
+
+    def create_indexes(self, source):
+        collections = self.date_collections_dict[source]
         collections.create_index([('package_id', 1)])
         collections.create_index([('tid', 1)], unique=True)
         self.logger.info("[完成索引建立]")
@@ -88,8 +104,25 @@ class InsertDateTask(object):
         start_n = int(part_num * day_offset)
         return start_n, part_num
 
+    def get_total_source(self):
+        if self.task_type == TaskType.flight:
+            total_source = task_source.flight_source
+        elif self.task_type == TaskType.round_flight:
+            total_source = task_source.round_flight_source
+        elif self.task_type == TaskType.multi_flight:
+            total_source = task_source.multi_flight_source
+        # todo add other source
+        return total_source
+
     def generate_source(self, each_data):
-        return ''
+        if self.task_type == TaskType.flight:
+            source = random.choice(task_source.flight_source)
+        elif self.task_type == TaskType.round_flight:
+            source = random.choice(task_source.round_flight_source)
+        elif self.task_type == TaskType.multi_flight:
+            source = random.choice(task_source.multi_flight_source)
+        # todo add other source
+        return source
 
     def generate_date_task(self, package_id, each_data, date):
         """
@@ -101,18 +134,23 @@ class InsertDateTask(object):
         """
         # type: package_id, dict, str -> DateTask
         if self.task_type == TaskType.flight:
+            # 飞机需要拼接 date
+            content = each_data['task_args']['content']
+            content = "{}{}".format(content, date)
+
             date_task = DateTask(
                 source=self.generate_source(each_data),
                 package_id=package_id,
                 task_type=self.task_type,
-                date=date
+                date=date,
+                content=content
             )
-        elif self.task_type == TaskType.round_flight:
-            pass
+        # elif self.task_type == TaskType.round_flight:
+        #     pass
         return date_task
 
-    def mongo_patched_insert(self, data):
-        collections = self.date_collections
+    def mongo_patched_insert(self, data, source):
+        collections = self.date_collections_dict[source]
         with mock.patch(
                 'pymongo.collection.Collection._insert',
                 common.patched_mongo_insert.Collection._insert
@@ -120,24 +158,31 @@ class InsertDateTask(object):
             result = collections.insert(data, continue_on_error=True)
             return result
 
-    def insert_mongo(self):
-        if len(self.tasks) > 0:
-            res = self.mongo_patched_insert(self.tasks)
-            self.logger.info("[update offset][offset: {}][pre offset: {}]".format(self.offset, self.pre_offset))
+    def __insert_mongo(self, source):
+        if len(self.tasks_dict[source]) > 0:
+            res = self.mongo_patched_insert(self.tasks_dict[source], source=source)
+            self.logger.info(
+                "[update offset][source: {}][offset: {}][pre offset: {}]".format(source, self.offset, self.pre_offset))
             self.offset = self.pre_offset
-            self.logger.info("[insert info][ offset: {} ][ {} ]".format(self.offset, res))
+            self.logger.info("[insert info][source: {}][ offset: {} ][ {} ]".format(source, self.offset, res))
             self.logger.info('[ 本次准备入库任务数：{0} ][ 实际入库数：{1} ][ 库中已有任务：{2} ][ 已完成总数：{3} ]'.format(
-                self.tasks.__len__(), res['n'], res.get('err', 0), self.offset))
-
+                self.tasks_dict[source].__len__(), res['n'], res.get('err', 0), self.offset))
             # 入库完成，清空任务列表
-            self.tasks = DateTaskList()
+            self.tasks_dict[source] = DateTaskList()
 
-    def insert_stat(self):
+    def insert_mongo(self, source=None):
+        if source is None:
+            for each_source in self.tasks_dict.keys():
+                self.__insert_mongo(source=each_source)
+        else:
+            self.__insert_mongo(source=source)
+
+    def insert_stat(self, source):
         """
         用于检查当前是否可以准备将任务入到 mysql 中
         :return: bool 是否准备将任务入到 mysql 中
         """
-        return len(self.tasks) >= INSERT_WHEN
+        return len(self.tasks_dict[source]) >= INSERT_WHEN
 
     def _insert_task(self, date_task: DateTask):
         """
@@ -145,62 +190,65 @@ class InsertDateTask(object):
         :param date_task:
         :return:
         """
-        if isinstance(datetime, DateTask):
-            self.tasks.append_task(date_task)
+        if isinstance(date_task, DateTask):
+            self.tasks_dict[date_task.source].append_task(date_task)
             self.pre_offset += 1
 
             # 如果当前可以入库，则执行入库
-            if self.insert_stat():
-                self.insert_mongo()
+            if self.insert_stat(source=date_task.source):
+                self.insert_mongo(source=date_task.source)
         else:
             raise TypeError('错误的 args 类型 < {0} >'.format(type(date_task).__name__))
 
     def insert_task(self):
         # 获取 package_id 列表
         package_id_list = self.package_info.get_package()[self.task_type]
-        if self.task_type == TaskType.flight:
-            for each_package_id in package_id_list:
-                # 基础任务请求
-                task_query = {
-                    'task_type': self.task_type,
-                    'package_id': each_package_id.package_id
-                }
+        for each_package_obj in package_id_list:
+            # 基础任务请求
+            task_query = {
+                'task_type': self.task_type,
+                'package_id': each_package_obj.package_id
+            }
 
-                # 基础任务计数
-                _task_n = self.base_collections.count(task_query)
+            # 基础任务计数
+            _task_n = self.base_collections.count(task_query)
 
-                # 本次任务生成份数
-                _split_n = int(each_package_id.update_cycle / 24)
+            # 本次任务生成份数
+            _split_n = int(each_package_obj.update_cycle / 24)
 
-                # 获取 start 位置以及生成份数
-                start_n, part_num = self.generate_package_start_and_part_num(
-                    task_n=_task_n,
-                    split_n=_split_n
-                )
+            # 获取 start 位置以及生成份数
+            start_n, part_num = self.generate_package_start_and_part_num(
+                task_n=_task_n,
+                split_n=_split_n
+            )
 
-                # 生成全量的 date 列表
-                date_list = (date_takes(each_package_id.end_date - each_package_id.start_date,
-                                        ignore_days=each_package_id.start_date))
+            # 生成全量的 date 列表
+            date_list = list(date_takes(each_package_obj.end_date - each_package_obj.start_date,
+                                        ignore_days=each_package_obj.start_date))
 
-                # 生成相应的日期任务
-                for line in self.base_collections.find(
-                        {
-                            'task_type': self.task_type,
-                            'package_id': each_package_id.package_id
-                        }
-                ).sort([("_id", 1)]).skip(start_n).limit(part_num):
-                    # 遍历当前 package_id 下的所有任务
-                    for date in date_list:
-                        # 遍历当前应该有的所有日期
+            # 生成相应的日期任务
+            for line in self.base_collections.find(
+                    {
+                        'task_type': self.task_type,
+                        'package_id': each_package_obj.package_id
+                    }
+            ).sort([("_id", 1)]).skip(start_n).limit(part_num):
+                # 遍历当前 package_id 下的所有任务
+                for date in date_list:
+                    # 遍历当前应该有的所有日期
 
-                        # 生成 each_data
-                        each_data = {}
+                    # 生成新的日期任务
+                    date_task = self.generate_date_task(
+                        package_id=each_package_obj.package_id,
+                        each_data=line,
+                        date=date
+                    )
 
-                        date_task = self.generate_date_task(
-                            package_id=each_package_id,
-                            each_data=each_data,
-                            date=date
-                        )
+                    # 插入新的日期任务
+                    self._insert_task(date_task)
+
+        # 最终入库，确保最后一部分数据能够入库
+        self.insert_mongo()
 
 
 if __name__ == '__main__':
