@@ -27,6 +27,11 @@ class DateTask(object):
         if task_type == TaskType.round_flight:
             self.task_args['continent_id'] = kwargs['continent_id']
 
+        # 任务是否已完成
+        self.finished = 0
+        # 任务使用的次数
+        self.used_times = 0
+
         # 生成任务 id
         self.tid = self.generate_tid()
 
