@@ -11,7 +11,7 @@
 server_port = 8087
 
 # TaskDB
-mongo_host = '10.10.213.148'
+mongo_host = 'mongodb://root:miaoji1109-=@10.19.2.103:27017/'
 mongo_base_task_db = 'RoutineBaseTask'
 mongo_date_task_db = 'RoutineDateTask'
 

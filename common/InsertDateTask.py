@@ -95,7 +95,7 @@ class InsertDateTask(object):
         """
         # type: int, int -> (int,int)
         # 通过日期偏移获取今天的 offset
-        day_offset = (datetime.datetime.today() - datetime.datetime(2017, 1, 1)).days % split_n
+        day_offset = (datetime.datetime.today() - datetime.datetime(2017, 1, 2)).days % split_n
 
         # 生成每部分的大小
         part_num = int(math.ceil(float(task_n) / float(split_n)))
@@ -114,7 +114,7 @@ class InsertDateTask(object):
         # todo add other source
         return total_source
 
-    def generate_source(self, each_data):
+    def generate_source(self):
         if self.task_type == TaskType.flight:
             source = random.choice(task_source.flight_source)
         elif self.task_type == TaskType.round_flight:
@@ -124,7 +124,7 @@ class InsertDateTask(object):
         # todo add other source
         return source
 
-    def generate_date_task(self, package_id, each_data, date):
+    def generate_date_task(self, source, package_id, each_data, date):
         """
         用于生成带有日期的任务
         :param package_id:
@@ -139,15 +139,61 @@ class InsertDateTask(object):
             content = "{}{}".format(content, date)
 
             date_task = DateTask(
-                source=self.generate_source(each_data),
+                source=source,
                 package_id=package_id,
                 task_type=self.task_type,
                 date=date,
                 content=content
             )
-        # elif self.task_type == TaskType.round_flight:
-        #     pass
-        return date_task
+            return date_task
+
+        elif self.task_type == TaskType.round_flight:
+            content = each_data['task_args']['content']
+            continent_id = each_data['task_args']['continent_id']
+            if int(continent_id) == 10:
+                start_interval = 4
+                end_interval = 8
+                self.n1 += 1
+            elif int(continent_id) == 20:
+                start_interval = 9
+                end_interval = 14
+                self.n2 += 1
+
+            elif int(continent_id) == 30:
+                start_interval = 8
+                end_interval = 13
+                self.n3 += 1
+
+            elif int(continent_id) == 40:
+                start_interval = 10
+                end_interval = 11
+                self.n4 += 1
+
+            elif int(continent_id) == 50:
+                start_interval = 8
+                end_interval = 15
+                self.n5 += 1
+
+            elif int(continent_id) == 60:
+                self.n6 += 1
+                start_interval = 10
+                end_interval = 11
+
+            date = datetime.datetime.strptime(date, '%Y%m%d')
+            for i in range(start_interval, end_interval):
+                # if int(continent_id) != 60:
+                #     break
+                round_date = date + datetime.timedelta(days=i)
+                round_date = round_date.strftime('%Y%m%d')
+                date_task = DateTask(
+                    source=source,
+                    package_id=package_id,
+                    task_type=self.task_type,
+                    date=datetime.datetime.strftime(date, '%Y%m%d') + '&' + round_date,
+                    content=content,
+                    continent_id=continent_id
+                )
+                yield date_task
 
     def mongo_patched_insert(self, data, source):
         collections = self.date_collections_dict[source]
@@ -201,16 +247,28 @@ class InsertDateTask(object):
             raise TypeError('错误的 args 类型 < {0} >'.format(type(date_task).__name__))
 
     def insert_task(self):
+        self.n = 0
+        self.n1 = 0
+        self.n2 = 0
+        self.n3 = 0
+        self.n4 = 0
+        self.n5 = 0
+        self.n6 = 0
+        self.continent = 0
+
         # 获取 package_id 列表
         package_id_list = self.package_info.get_package()[self.task_type]
+        #package_id_list是package_info集合中符合task_type的记录列表
         for each_package_obj in package_id_list:
+            # if each_package_obj.package_id != 13:
+            #     continue
             # 基础任务请求
             task_query = {
                 'task_type': self.task_type,
                 'package_id': each_package_obj.package_id
             }
 
-            # 基础任务计数
+            # self.base_collections是BaseTask集合。 计算基础任务计数
             _task_n = self.base_collections.count(task_query)
 
             # 本次任务生成份数
@@ -226,31 +284,39 @@ class InsertDateTask(object):
             date_list = list(date_takes(each_package_obj.end_date - each_package_obj.start_date,
                                         ignore_days=each_package_obj.start_date))
 
-            # 生成相应的日期任务
+            self.m = 0
+            # 在BaseTask集合中查找符合task_type的记录
             for line in self.base_collections.find(
                     {
                         'task_type': self.task_type,
                         'package_id': each_package_obj.package_id
                     }
             ).sort([("_id", 1)]).skip(start_n).limit(part_num):
-                # 遍历当前 package_id 下的所有任务
+                self.m += 1
+                if line['task_args']['continent_id'] in ['10']:
+                    self.continent += 1
+                source = self.generate_source()
                 for date in date_list:
                     # 遍历当前应该有的所有日期
 
                     # 生成新的日期任务
                     date_task = self.generate_date_task(
+                        source,
                         package_id=each_package_obj.package_id,
                         each_data=line,
                         date=date
                     )
 
                     # 插入新的日期任务
-                    self._insert_task(date_task)
+                    for i in date_task:
+                        self.n += 1
+                        print(self.n)
+                        self._insert_task(i)
 
         # 最终入库，确保最后一部分数据能够入库
         self.insert_mongo()
 
 
 if __name__ == '__main__':
-    insert_date_task = InsertDateTask(task_type=TaskType.flight)
+    insert_date_task = InsertDateTask(task_type=TaskType.round_flight)
     insert_date_task.insert_task()

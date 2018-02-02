@@ -136,5 +136,5 @@ class InsertBaseTask(object):
 if __name__ == '__main__':
     # with InsertBaseTask(task_type=TaskType.flight) as insert_task:
     #     insert_task.insert_task()
-    insert_task = InsertBaseTask(task_type=TaskType.flight)
+    insert_task = InsertBaseTask(task_type=TaskType.round_flight)
     insert_task.insert_task()
