@@ -65,10 +65,10 @@ class GetTask(tornado.web.RequestHandler):
                     if type in collection_name:
                         print('ok!')
                         self.collection_name = collection_name
-                        # pika_send.channel.queue_declare(
-                        #     queue=queue_name,
-                        #     callback=partial(self.call, collection_name=collection_name)
-                        # )
+                        pika_send.channel.queue_declare(
+                            queue=queue_name,
+                            callback=partial(self.call, collection_name=collection_name)
+                        )
 
                         # print(self.message_count)
                         # receive_mongo_data()

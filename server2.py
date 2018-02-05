@@ -14,13 +14,15 @@ import tornado.concurrent
 import json
 import time
 import pika
+from bson import json_util
+from bson.objectid import ObjectId
 from rabbitmq import pika_send
 from tornado.options import define
 from conf import config
 from concurrent.futures import ThreadPoolExecutor
 # from rabbitmq.mongo_data import receive_mongo_data
 from functools import partial
-from rabbitmq.consumer import connect_rabbitmq
+from rabbitmq.consumer import connect_rabbitmq, insert_spider_result, feed_back_date_task
 from tornado.locks import Condition
 from pika.adapters.blocking_connection import BlockingConnection
 
@@ -31,24 +33,23 @@ tornado.options.parse_command_line()
 
 class GetTask(tornado.web.RequestHandler):
     executor = ThreadPoolExecutor(10)
-    @tornado.concurrent.run_on_executor
+
     def callback(self, ch, method, properties, body, **kwargs):
         if method.delivery_tag <= kwargs['ack_count']:
-            ch.basic_ack(method.delivery_tag, multiple=True)
-            print(" [x] Received %r" % body)
-            self.response.append(body)
+            try:
+                ch.basic_ack(method.delivery_tag, multiple=True)
+                body = eval(str(body, 'utf-8'))
+                body['collection_name'] = kwargs['collection_name']
+                print(" [x] Received %r" % body)
+
+                self.response.append(body)
+            except Exception as e:
+                print('Exception', e)
         else:
             ch.basic_nack(method.delivery_tag, multiple=True)
             ch.stop_consuming()
 
-    # @tornado.concurrent.run_on_executor
-    def call(self, frame, **kwargs):
-        message_count = frame.method.message_count
-        # receive_mongo_data(message_count, kwargs['collection_name'])
-        print(kwargs['collection_name'].split('_')[3], '队列中还有', message_count)
-
-
-    # @tornado.web.asynchronous
+    @tornado.web.asynchronous
     @tornado.gen.coroutine
     def get(self):
         global consumer_connection
@@ -57,46 +58,42 @@ class GetTask(tornado.web.RequestHandler):
             consumer_connection = connect_rabbitmq(consumer_connection)
 
         date_type = self.get_argument('data_type', '').strip()
-        count = int(self.get_argument('count', '0').strip())
-
-        # yield self.async_get(date_type.split('_'), count)
-        # ioloop.run_sync(self.async_get(date_type.split('_'), count))
-        # tornado.ioloop.IOLoop.instance().add_callback(callback=self.result)
-        # self.result()
-        self.condition = Condition()
-        yield [self.async_get(date_type.split('_'), count)]
-
-    # @tornado.gen.coroutine
-    # def waiter(self):
-    #     print("I'll wait right here")
-    #     yield self.condition.wait()  # Yield a Future.
-    #     print("I'm done waiting")
-    #
-    # @tornado.gen.coroutine
-    # def notifier(self):
-    #     print("About to notify")
-    #     self.condition.notify()
-    #     print("Done notifying")
-
+        count = int(self.get_argument('count', '0').strip())/5
+        channel = consumer_connection.channel()
+        channel.basic_qos(prefetch_count=int(count))
+        print(channel)
+        yield [self.async_get(date_type.split('_'), int(count), channel)]
 
     @tornado.concurrent.run_on_executor
-    def async_get(self, types, count):
+    def async_get(self, types, count, channel):
         if types:
             print(types)
-            # task_list = app.get(types, count)
-            # self.write(json.dumps(task_list))
             self.response = []
-
             for type in types:
                 for collection_name in pika_send.date_task_db.collection_names():
+                    if collection_name == 'DateTask_Round_Flight_pricelineRoundFlight_20180202':
+                        time.sleep(2)
                     queue_name = collection_name.split('_')[3]
+                    # if collection_name in ['DateTask_Round_Flight_cheapticketsRoundFlight_20180202', 'DateTask_Round_Flight_orbitzRoundFlight_20180202']:
+                    #     continue
                     if type in collection_name:
-                        print('ok!')
-                        self.collection_name = collection_name
-                        channel = consumer_connection.channel()
-                        channel.basic_qos(prefetch_count=count)
-                        channel.basic_consume(consumer_callback=partial(self.callback, ack_count=count), queue=queue_name, no_ack=False)
-                        channel.start_consuming()
+                        try:
+                            print('ok!')
+                            self.collection_name = collection_name
+
+                            channel.basic_consume(consumer_callback=partial(self.callback, ack_count=count,
+                                                                            collection_name=collection_name),
+                                                  queue=queue_name, no_ack=False)
+
+                            channel.start_consuming()
+                        except pika.exceptions.RecursionError as e:
+                            print(e)
+                        except pika.exceptions.InvalidFrameError as e:
+                            print(e)
+                        except Exception as e:
+                            print(e)
+                            # consumer_connection.close()
+                            # consumer_connection = connect_rabbitmq(consumer_connection)
                         # pika_send.channel.queue_declare(
                         #     queue=queue_name,
                         #     callback=partial(self.call, collection_name=collection_name)
@@ -112,19 +109,24 @@ class GetTask(tornado.web.RequestHandler):
 
             print('---', self.response)
             self.write(str(self.response))
+            channel.close()
             self.finish()
         else:
             self.write('[]')
-
+            channel.close()
+            self.finish()
 
 class FeedBack(tornado.web.RequestHandler):
     # executor = ser_excutor.executor_pool
 
     @tornado.web.asynchronous
     @tornado.gen.coroutine
-    def get(self):
+    def post(self):
         print('FeedBack!')
         task_info = self.get_argument('q', '[]').strip()
+        task_info = eval(task_info)
+        insert_spider_result(task_info)
+        feed_back_date_task(task_info)
         print(task_info)
 
 
@@ -144,7 +146,6 @@ class FeedBack(tornado.web.RequestHandler):
 #         if task_list:
 #             app.feedback(task_list)
 
-# consumer = ExampleConsumer()
 
 application = tornado.web.Application([
     (r'/workload', GetTask),

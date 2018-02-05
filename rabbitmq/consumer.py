@@ -1,6 +1,7 @@
 from pika import adapters
 import pika
 import logging
+from rabbitmq import pika_send
 
 LOG_FORMAT = ('%(levelname) -10s %(asctime)s %(name) -30s %(funcName) '
               '-35s %(lineno) -5d: %(message)s')
@@ -15,6 +16,26 @@ def connect_rabbitmq(consumer_connection=None):
     user_pwd = pika.PlainCredentials(username, pwd)
     consumer_connection = pika.BlockingConnection(pika.ConnectionParameters(host='10.10.189.213', virtual_host='TaskDistribute', credentials=user_pwd))
     return consumer_connection
+
+def insert_spider_result(result):
+    for task_info in result:
+        try:
+            task_info.pop('_id')
+            pika_send.client['case_result']['spider_result'].insert(task_info)
+        except Exception as e:
+            print(e)
+            print('tid:', task_info['tid'])
+def feed_back_date_task(result):
+    for task_info in result:
+        if task_info['error'] == 0:
+            pika_send.date_task_db[task_info['collection_name']].update({'tid': task_info['tid']}, {'$set': {'finished': 1}})
+            pika_send.date_task_db[task_info['collection_name']].update({'tid': task_info['tid']}, {'$set': {'run': 0}})
+        else:
+            pika_send.date_task_db[task_info['collection_name']].update({'tid': task_info['tid']}, {'$set': {'finished': 0}})
+            pika_send.date_task_db[task_info['collection_name']].update({'tid': task_info['tid']}, {'$set': {'run': 0}})
+            used_times = task_info['used_times'] + 1
+            pika_send.date_task_db[task_info['collection_name']].update({'tid': task_info['tid']}, {'$set': {'used_times': used_times}})
+
 
 class ExampleConsumer(object):
     """This is an example consumer that will handle unexpected interactions
