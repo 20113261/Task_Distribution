@@ -35,17 +35,19 @@ class GetTask(tornado.web.RequestHandler):
     executor = ThreadPoolExecutor(10)
 
     def callback(self, ch, method, properties, body, **kwargs):
-        if method.delivery_tag <= kwargs['ack_count']:
+        left_count = ch.get_waiting_message_count()
+        if method.delivery_tag == kwargs['ack_count']:
             try:
                 ch.basic_ack(method.delivery_tag, multiple=True)
-                body = eval(str(body, 'utf-8'))
-                body['collection_name'] = kwargs['collection_name']
+                # body = eval(str(body, 'utf-8'))
+                # body['collection_name'] = kwargs['collection_name']
                 print(" [x] Received %r" % body)
 
                 self.response.append(body)
+                ch.stop_consuming()
             except Exception as e:
                 print('Exception', e)
-        else:
+        elif method.delivery_tag >= kwargs['ack_count']:
             ch.basic_nack(method.delivery_tag, multiple=True)
             ch.stop_consuming()
 
@@ -59,28 +61,28 @@ class GetTask(tornado.web.RequestHandler):
 
         date_type = self.get_argument('data_type', '').strip()
         count = int(self.get_argument('count', '0').strip())/5
-        channel = consumer_connection.channel()
-        channel.basic_qos(prefetch_count=int(count))
-        print(channel)
-        yield [self.async_get(date_type.split('_'), int(count), channel)]
+
+        yield [self.async_get(date_type.split('_'), int(count))]
 
     @tornado.concurrent.run_on_executor
-    def async_get(self, types, count, channel):
+    def async_get(self, types, count):
         if types:
             print(types)
             self.response = []
             for type in types:
                 for collection_name in pika_send.date_task_db.collection_names():
-                    if collection_name == 'DateTask_Round_Flight_pricelineRoundFlight_20180202':
-                        time.sleep(2)
+                    channel = consumer_connection.channel()
+                    channel.basic_qos(prefetch_count=int(count))
+                    if collection_name == 'DateTask_Round_Flight_pricelineRoundFlight_20180205':
+                        continue
                     queue_name = collection_name.split('_')[3]
-                    # if collection_name in ['DateTask_Round_Flight_cheapticketsRoundFlight_20180202', 'DateTask_Round_Flight_orbitzRoundFlight_20180202']:
+                    # if collection_name in ['DateTask_Round_Flight_cheapticketsRoundFlight_20180205', 'DateTask_Round_Flight_orbitzRoundFlight_20180205']:
                     #     continue
                     if type in collection_name:
                         try:
                             print('ok!')
                             self.collection_name = collection_name
-
+                            channel.get_waiting_message_count()
                             channel.basic_consume(consumer_callback=partial(self.callback, ack_count=count,
                                                                             collection_name=collection_name),
                                                   queue=queue_name, no_ack=False)

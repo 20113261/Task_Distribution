@@ -40,5 +40,6 @@ class TaskType(enum.IntEnum):
 
 if __name__ == '__main__':
     print(TaskType.flight)
+    t = str(TaskType.flight)
     print(TaskType(1))
     print(TaskType.parse_str("HOTEL"))

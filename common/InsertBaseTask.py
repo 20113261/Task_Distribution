@@ -40,7 +40,10 @@ class InsertBaseTask(object):
         self.pre_offset = 0
 
         client = pymongo.MongoClient(host=config.mongo_host)
-        self.db = client[config.mongo_base_task_db]
+        if self.task_type == TaskType.hotel:
+            self.db = client[config.hotel_base_task_db]
+        else:
+            self.db = client[config.mongo_base_task_db]
 
         self.tasks = BaseTaskList()
 
@@ -121,7 +124,19 @@ class InsertBaseTask(object):
                     }
                 )
         elif self.task_type == TaskType.hotel:
-            pass
+            for city_id_, suggest_, suggest_type_, package_id_, country_id_, source_ in generate_hotel_base_task_info():
+                self._insert_task(
+                    {
+                        'city_id': city_id_,
+                        'suggest': suggest_,
+                        'suggest_type': suggest_type_,
+                        'package_id': package_id_,
+                        'task_type': self.task_type,
+                        'country_id': country_id_,
+                        'source': source_
+                    }
+                )
+
         # 最终剩余数据入库
         if len(self.tasks) > 0:
             self.insert_mongo()

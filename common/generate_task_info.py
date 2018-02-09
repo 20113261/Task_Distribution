@@ -378,12 +378,14 @@ def generate_hotel_base_task_info():
   city.grade,
   ota_location.source,
   ota_location.suggest,
-  ota_location.suggest_type
+  ota_location.suggest_type,
+  ota_location.country_id
 FROM ota_location
   LEFT JOIN city ON ota_location.city_id
-WHERE source IN ('booking', 'agoda', 'elong', 'hotels', 'expedia', 'ctrip') LIMIT 1000;'''
+WHERE source IN ('booking', 'agoda', 'elong', 'hotels', 'expedia', 'ctrip') LIMIT 10000;'''
 
     for row in fetchall_ss(source_info_pool, sql):
+
         city_id = row[0]
         trans_degree = row[1]
         grade = row[2]
@@ -392,7 +394,7 @@ WHERE source IN ('booking', 'agoda', 'elong', 'hotels', 'expedia', 'ctrip') LIMI
 
         suggest = row[4]
         suggest_type = row[5]
-
+        country_id = row[6]
         # package_id = 100
 
         if city_id is None:
@@ -406,7 +408,7 @@ WHERE source IN ('booking', 'agoda', 'elong', 'hotels', 'expedia', 'ctrip') LIMI
         else:
             package_id = 8
 
-        yield city_id, suggest, suggest_type, package_id
+        yield city_id, suggest, suggest_type, package_id, country_id, source
 
 
 if __name__ == '__main__':
@@ -431,9 +433,9 @@ if __name__ == '__main__':
     '''
     HotelTasks
     '''
-    # _count = 0
-    # for line in generate_hotel_base_task_info():
-    #     _count += 1
-    #     if _count == 100:
-    #         break
-    #     print(line)
+    _count = 0
+    for line in generate_hotel_base_task_info():
+        _count += 1
+        if _count == 100:
+            break
+        print(line)

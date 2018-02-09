@@ -83,8 +83,8 @@ class InsertDateTask(object):
         collections.create_index([('tid', 1)], unique=True)
         self.logger.info("[完成索引建立]")
 
-    @staticmethod
-    def generate_package_start_and_part_num(task_n, split_n):
+    # @staticmethod
+    def generate_package_start_and_part_num(self, task_n, split_n, package_id):
         """
             任务偏移量通过 2017-01-01 到今天的偏移，取任务天数进行计算，
             由此可以免去记录任务偏移量的内容，仅需要提供开始偏移以及最终偏移，
@@ -95,7 +95,10 @@ class InsertDateTask(object):
         """
         # type: int, int -> (int,int)
         # 通过日期偏移获取今天的 offset
-        day_offset = (datetime.datetime.today() - datetime.datetime(2017, 1, 2)).days % split_n
+        # day_offset = (datetime.datetime.today() - datetime.datetime(2017, 1, 2)).days % split_n
+        day_offset_result = self.base_task_db[config.package_info_collection].find({'id': package_id})
+        for line in day_offset_result:
+            day_offset = line['slice']
 
         # 生成每部分的大小
         part_num = int(math.ceil(float(task_n) / float(split_n)))
@@ -124,7 +127,7 @@ class InsertDateTask(object):
         # todo add other source
         return source
 
-    def generate_date_task(self, source, package_id, each_data, date):
+    def generate_date_task(self, source, package_id, each_data, date, slice_num):
         """
         用于生成带有日期的任务
         :param package_id:
@@ -191,7 +194,8 @@ class InsertDateTask(object):
                     task_type=self.task_type,
                     date=datetime.datetime.strftime(date, '%Y%m%d') + '&' + round_date,
                     content=content,
-                    continent_id=continent_id
+                    continent_id=continent_id,
+                    slice_num = slice_num
                 )
                 yield date_task
 
@@ -277,7 +281,8 @@ class InsertDateTask(object):
             # 获取 start 位置以及生成份数
             start_n, part_num = self.generate_package_start_and_part_num(
                 task_n=_task_n,
-                split_n=_split_n
+                split_n=_split_n,
+                package_id=each_package_obj.package_id
             )
 
             # 生成全量的 date 列表
@@ -304,7 +309,8 @@ class InsertDateTask(object):
                         source,
                         package_id=each_package_obj.package_id,
                         each_data=line,
-                        date=date
+                        date=date,
+                        slice_num=each_package_obj.slice_num
                     )
 
                     # 插入新的日期任务

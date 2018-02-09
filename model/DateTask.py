@@ -34,8 +34,10 @@ class DateTask(object):
 
         # 生成任务 id
         self.tid = self.generate_tid()
-        # 判断数据入队状态，0：还未进行任何操作，1：准备被查询和入队，2：在消息队列里，3：被爬虫反馈
+        # 判断数据入队状态，0：不在队列里了（未进入队列或已被爬虫反馈），1：在消息队列里
         self.run = 0
+        #切片记录
+        self.slice_num = kwargs['slice_num']
 
     def generate_tid(self):
         if self.task_type in (TaskType.flight, TaskType.round_flight):

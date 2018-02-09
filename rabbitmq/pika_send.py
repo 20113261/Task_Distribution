@@ -6,7 +6,11 @@ import logging
 import logging.config
 import pymongo
 from conf import task_source, config
+from functools import partial
+from bson.objectid import ObjectId
 
+
+logger = logging.getLogger('mq:')
 TORNADO_PORT = 8889
 # RMQ_USER = 'user'
 # RMQ_PWD = 'password'
@@ -37,27 +41,32 @@ class PikaClient(object):
             param = pika.ConnectionParameters(host='10.10.189.213', virtual_host='TaskDistribute', credentials=user_pwd)
 
             self.connection = TornadoConnection(param, on_open_callback=self.on_connected)
+            return self.connection
         except Exception as e:
             logger.error('Something went wrong... %s', e)
 
     def on_connected(self, connection):
         """When we are completely connected to rabbitmq this is called"""
 
-        # logger.info('Succesfully connected to rabbitmq')
+        logger.info('Succesfully connected to rabbitmq')
 
         # open a channel
-        self.connection.channel(self.on_channel_open)
+        # self.connection.channel(self.on_channel_open)
 
-    def on_channel_open(self, new_channel):
+    def on_channel_open(self, new_channel, **kwargs):
         """When the channel is open this is called"""
         logging.info('Opening channel to rabbitmq')
 
-        global channel
+        # global channel
         channel = new_channel
-        callback = self.on_mq_declare
-        for db in date_task_db.collection_names():
-            queue = channel.queue_declare(queue=db,
-                                     callback=callback)
+
+        # callback = self.on_mq_declare
+        # for db in date_task_db.collection_names():
+        channel.queue_declare(queue=kwargs['queue_name'],
+                              callback=partial(self.callback_first,
+                              collection_name=kwargs['collection_name'],
+                              consumer_channel=channel)
+                              )
 
 
     def on_mq_declare(self, frame):
@@ -66,6 +75,29 @@ class PikaClient(object):
         channel.basic_publish(exchange='', routing_key='my_queue_name',
                               body='haha')
 
+    def callback_second(self, ch, method, properties, body, **kwargs):
+        if method.delivery_tag <= kwargs['ack_count']:
+            try:
+                ch.basic_ack(method.delivery_tag, multiple=True)
+                body = eval(str(body, 'utf-8'))
+                body['collection_name'] = kwargs['collection_name']
+                print(" [x] Received %r" % body)
+
+                self.response.append(body)
+            except Exception as e:
+                print('Exception', e)
+        else:
+            ch.basic_nack(method.delivery_tag, multiple=True)
+
+    def callback_first(self, frame, **kwargs):
+        message_count = frame.method.message_count
+        if message_count:
+            print(kwargs['collection_name'].split('_')[3], message_count)
+            channel = kwargs['consumer_channel']
+            channel.basic_qos(prefetch_count=5)
+            channel.basic_consume(consumer_callback=partial(self.callback_second, ack_count=10,
+                                                            collection_name=kwargs['collection_name']),
+                                  queue=frame.method.queue, no_ack=False)
 
 class Application(tornado.web.Application):
     def __init__(self):

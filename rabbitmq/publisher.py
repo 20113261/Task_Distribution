@@ -26,7 +26,7 @@ class ExamplePublisher(object):
     """
     EXCHANGE = 'xiaopeng'
     EXCHANGE_TYPE = 'direct'
-    PUBLISH_INTERVAL = 300
+    PUBLISH_INTERVAL = 100
     QUEUE = 'hello2'
     ROUTING_KEY = 'hello2'
     QUEUE_LIST = ['cheapticketsRoundFlight', 'cleartripRoundFlight', 'ebookersRoundFlight', 'orbitzRoundFlight', 'pricelineRoundFlight']

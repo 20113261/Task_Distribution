@@ -77,3 +77,31 @@ def func_time_logger(fun):
         return result
 
     return logging
+
+class Logger(object):
+    def __init__(self):
+        self.logger = logging.getLogger()
+        self.logger.setLevel(logging.INFO)    # Log等级总开关
+
+        logfile = './logger.txt'
+        fh = logging.handlers.RotatingFileHandler(logfile,
+            maxBytes=20,
+            backupCount=5)
+        fh = logging.FileHandler(logfile, mode='a')
+        fh.setLevel(logging.DEBUG)   # 输出到file的log等级的开关
+
+        ch = logging.StreamHandler()
+        ch.setLevel(logging.DEBUG)   # 输出到console的log等级的开关
+
+        formatter = logging.Formatter("%(asctime)s - %(filename)s- %(funcName)s[line:%(lineno)d] - %(levelname)s: %(message)s")
+        # ("%(asctime)s - %(filename)s- %(funcName)s[line:%(lineno)d] - %(levelname)s: %(message)s")
+        fh.setFormatter(formatter)
+        ch.setFormatter(formatter)
+
+        self.logger.addHandler(fh)
+        self.logger.addHandler(ch)
+
+    def get_logger(self):
+        return self.logger
+
+

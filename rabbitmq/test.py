@@ -23,9 +23,15 @@
 #
 # IOLoop.current().run_sync(runner)
 
-def g(x):
-    yield from range(x, 0, -1)
-    yield from range(x)
-print(list(g(5)))
-for g  in g(6):
-    print(g,end=',')
+# def g(x):
+#     yield from range(x, 0, -1)
+#     yield from range(x)
+# print(list(g(5)))
+# for g  in g(6):
+#     print(g,end=',')
+
+import logger
+
+logger = logger.Logger().get_logger()
+logger.info('aab')
+

@@ -10,7 +10,7 @@ connection = pika.BlockingConnection(pika.ConnectionParameters(host='10.10.189.2
 
 channel = connection.channel()
 
-channel.queue_declare(queue='hello')
+# channel.queue_declare(queue='hello')
 
 def callback(ch, method, properties, body):
     print(" [x] Received %r" % body)
@@ -31,5 +31,5 @@ def consume():
                           no_ack=False)
     channel.start_consuming()
 
-for i in range(10):
-    channel.basic_publish()
+for i in range(5):
+    channel.basic_publish('consumer', 'hello', 'hello_world!')

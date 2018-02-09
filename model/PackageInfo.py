@@ -14,7 +14,7 @@ from collections import defaultdict
 
 
 class PackageId(object):
-    def __init__(self, package_id, task_type: TaskType, update_cycle, start_date, end_date):
+    def __init__(self, package_id, task_type: TaskType, update_cycle, start_date, end_date, slice_num):
         self.package_id = int(package_id)
         self.update_cycle = int(update_cycle)
         self.start_date = int(start_date)
@@ -23,6 +23,7 @@ class PackageId(object):
         self.task_type = task_type
         self.package_id = package_id
         self.update_cycle = update_cycle
+        self.slice_num = slice_num
 
     def __eq__(self, other):
         return self.package_id == other.package_id and self.task_type == other.task_type
@@ -58,7 +59,8 @@ class PackageInfo(object):
                     task_type=task_type,
                     update_cycle=update_cycle,
                     start_date=line['daydiff_start'],
-                    end_date=line['daydiff_end']
+                    end_date=line['daydiff_end'],
+                    slice_num = line['slice']
                 )
                 __dict[task_type].append(package)
         # sort dict
