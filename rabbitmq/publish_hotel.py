@@ -32,7 +32,7 @@ class ExamplePublisher(object):
     PUBLISH_INTERVAL = 300
     QUEUE = 'hello2'
     ROUTING_KEY = 'hello2'
-    QUEUE_LIST = ['cheapticketsRoundFlight', 'cleartripRoundFlight', 'ebookersRoundFlight', 'orbitzRoundFlight', 'pricelineRoundFlight']
+    QUEUE_LIST = ['agodaListHotel', 'bookingListHotel', 'ctripListHotel', 'elongListHotel', 'expediaListHotel', 'hotelsListHotel']
     MESSAGE_COUNT_LIST = {}
 
     def __init__(self, amqp_url):
@@ -313,7 +313,7 @@ class ExamplePublisher(object):
         #                                   headers=hdrs)
 
         print('MESSAGE_COUNT_LIST:', self.MESSAGE_COUNT_LIST)
-        final_distribute_result = final_distribute('Round')
+        final_distribute_result = final_distribute('Hotel')
         print('final_distribute_result', final_distribute_result)
         # time.sleep(10)
         # final_distribute_result = {'DateTask_Round_Flight_cheapticketsRoundFlight_20180202': [(12, 824), (13, 57)]}
@@ -322,12 +322,17 @@ class ExamplePublisher(object):
                 for collection_name, mongo_tuple_list in final_distribute_result.items():
                     for line in insert_mongo_data(queue_name, collection_name, mongo_tuple_list):
                         print('line: %s'% (str(line)))
-                        content = line['task_args']['content'] + line['task_args']['date']
-                        workload_key = content.replace('&', '_')
+                        content = line['task_args']['content'] #注意往返飞机要拼接上日期，酒店不用
+                        source = line['source']
+                        content_list = content.split('&')
+                        content_list.insert(2, source)
+                        workload_key = '_'.join(content_list)
                         data = {"content": content, "error":-1,"id":line['tid'], "is_assigned":0,"priority":0,
-                                "proxy":"10.10.114.35","score":"-100","source":line['source'], "success_times":0,
+                                "proxy":"10.10.114.35","score":"-100","source":source, "success_times":0,
                                 "timeslot":208,"update_times":0,"workload_key": workload_key,
-                                "used_times": line['used_times'], "take_times": line['take_times'], "tid":line['tid']}
+                                "used_times": line['used_times'], "take_times": line['take_times'], "suggest": line['task_args']['suggest'],
+                                "suggest_type": line['task_args']['suggest_type'], "city_id": line['task_args']['city_id'],
+                                "tid":line['tid']}
                         self._channel.basic_publish('xiaopeng', queue_name,
                                                str(data)
                                                )

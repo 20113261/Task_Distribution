@@ -38,7 +38,7 @@ hotel_source = [
     'bookingListHotel',
     'elongListHotel',
     'agodaListHotel',
-    'ctripTWHotel'
+    'ctripListHotel'
 ]
 
 train_source = [

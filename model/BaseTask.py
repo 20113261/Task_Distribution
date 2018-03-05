@@ -20,11 +20,15 @@ class BaseTask(object):
             'content': kwargs.get('content', ''),
             'ticket_info': kwargs.get('ticket_info', {})
         }
-        if task_type == TaskType.round_flight:
+        if task_type == TaskType.RoundFlight:
             self.task_args['continent_id'] = kwargs['continent_id']
 
-        if task_type == TaskType.hotel:
+        if task_type == TaskType.Hotel:
             self.task_args['source'] = kwargs['source']
+            self.task_args['city_id'] = kwargs['city_id']
+            self.task_args['suggest'] = kwargs['suggest']
+            self.task_args['suggest_type'] = kwargs['suggest_type']
+            self.task_args['country_id'] = kwargs['country_id']
 
         # 生成任务 id
         self.tid = self.generate_tid()

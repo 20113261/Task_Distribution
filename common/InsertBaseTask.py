@@ -10,7 +10,7 @@ import mock
 import common.patched_mongo_insert
 from conf import config
 from model.TaskType import TaskType
-from logger import get_logger
+from logger_file import get_logger
 from model.BaseTask import BaseTask
 from common.generate_task_info import generate_hotel_base_task_info, generate_flight_base_task_info, \
     generate_round_flight_base_task_info
@@ -40,10 +40,10 @@ class InsertBaseTask(object):
         self.pre_offset = 0
 
         client = pymongo.MongoClient(host=config.mongo_host)
-        if self.task_type == TaskType.hotel:
-            self.db = client[config.hotel_base_task_db]
-        else:
-            self.db = client[config.mongo_base_task_db]
+        # if self.task_type == TaskType.hotel:
+        #     self.db = client[config.hotel_base_task_db]
+        # else:
+        self.db = client[config.mongo_base_task_db]
 
         self.tasks = BaseTaskList()
 
@@ -52,8 +52,9 @@ class InsertBaseTask(object):
 
     def create_mongo_indexes(self):
         collections = self.db[self.collection_name]
-        collections.create_index([('package_id', 1)])
-        collections.create_index([('tid', 1)], unique=True)
+        if self.task_type in [TaskType.Flight, TaskType.RoundFlight, TaskType.MultiFlight]:
+            collections.create_index([('package_id', 1)])
+            collections.create_index([('tid', 1)], unique=True)
         self.logger.info("[完成索引建立]")
 
     def generate_collection_name(self):
@@ -111,7 +112,7 @@ class InsertBaseTask(object):
                         'task_type': self.task_type
                     }
                 )
-        elif self.task_type == TaskType.round_flight:
+        elif self.task_type == TaskType.RoundFlight:
             for dept, dest, package_id, continent_id in generate_round_flight_base_task_info():
                 content = "{}&{}&".format(dept, dest)
                 self._insert_task(
@@ -151,5 +152,5 @@ class InsertBaseTask(object):
 if __name__ == '__main__':
     # with InsertBaseTask(task_type=TaskType.flight) as insert_task:
     #     insert_task.insert_task()
-    insert_task = InsertBaseTask(task_type=TaskType.round_flight)
+    insert_task = InsertBaseTask(task_type=TaskType.hotel)
     insert_task.insert_task()

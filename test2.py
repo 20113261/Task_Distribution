@@ -2,7 +2,8 @@ import requests, bson, random
 import time
 import hashlib
 import logging
-from logger import Logger
+import datetime
+from logger_file import Logger
 from bson.objectid import ObjectId
 from rabbitmq import pika_send
 from conf import config
@@ -12,12 +13,14 @@ from conf import config
 
 logger = Logger().get_logger()
 
-host = 'localhost'
+host = 'localhost:12345'
+# host = '10.10.110.74:48069'
 
 for i in range(1000):
-    url = 'http://{host}:12345/workload'.format(host=host)
+    url = 'http://{host}/workload'.format(host=host)
     try:
-        res = requests.get(url, params={'data_type': "RoundFlight", 'count': config.per_retrieve_count}, timeout=30).text
+        # res = requests.get(url, params={'data_type': "RoundFlight", 'count': 500}, timeout=60).text  #config.per_retrieve_count
+        res = requests.get(url, params={'data_type': "ListHotel", 'count':500}, timeout=60).text  #config.per_retrieve_count
         res = eval(res)
         result = []
         for t in res:
@@ -26,9 +29,10 @@ for i in range(1000):
             t['error'] = 0 if random.random() > 0.5 else 22
             t['qid'] = qid
             result.append(t)
-        logger.info('result:%s'%result)
+        logger.info('result数量:%s'%len(result))
         logger.info('从master端获取到result')
-        requests.post('http://{host}:12345/complete_workload'.format(host=host), data={'q': str(result)})
+        # time.sleep(20)
+        requests.get('http://{host}/complete_workload'.format(host=host), data={'q': str(result)})
         print(i+1)
         logger.info('反馈结果给master')
     except Exception as e:

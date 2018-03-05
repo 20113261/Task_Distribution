@@ -15,7 +15,7 @@ mongo_host = 'mongodb://root:miaoji1109-=@10.19.2.103:27017/'
 mongo_base_task_db = 'RoutineBaseTask'
 mongo_date_task_db = 'RoutineDateTask'
 
-hotel_base_task_db = 'HotelRoutineBaseTask'
+# hotel_base_task_db = 'HotelRoutineBaseTask'
 
 # TaskCollection
 package_info_collection = 'package_info'

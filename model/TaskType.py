@@ -9,23 +9,23 @@ import enum
 
 
 class TaskType(enum.IntEnum):
-    flight = 0
-    round_flight = 1
-    multi_flight = 2
-    hotel = 3
-    train = 4
-    bus = 5
+    Flight = 0
+    RoundFlight = 1
+    MultiFlight = 2
+    Hotel = 3
+    Train = 4
+    Bus = 5
 
     @staticmethod
     def parse_str(string):
         if isinstance(string, str):
             str_name = {
-                'flight': TaskType.flight,
-                'roundflight': TaskType.round_flight,
-                'multiflight': TaskType.multi_flight,
-                'hotel': TaskType.hotel,
-                'train': TaskType.train,
-                'bus': TaskType.bus
+                'flight': TaskType.Flight,
+                'roundflight': TaskType.RoundFlight,
+                'multiflight': TaskType.MultiFlight,
+                'hotel': TaskType.Hotel,
+                'train': TaskType.Train,
+                'bus': TaskType.Bus
             }
 
             _res = str_name.get(string.lower())

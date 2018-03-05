@@ -186,3 +186,11 @@ spider_task_tmp_config = dict(
 
 spider_task_tmp_pool = init_pool(**spider_task_tmp_config)
 
+db_config = dict(
+    user='mioji_admin',
+    password='mioji1109',
+    host='10.10.238.148',
+    database='task_db'
+)
+
+task_db_monitor_db_pool = init_pool(**db_config)

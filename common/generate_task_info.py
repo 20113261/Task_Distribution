@@ -7,7 +7,7 @@
 # @Software: PyCharm
 from conn_pool import base_data_pool, source_info_pool
 from mysql_execute import fetchall, fetchall_ss
-from logger import get_logger
+from logger_file import get_logger
 
 logger = get_logger("generate_base_task")
 
@@ -372,18 +372,26 @@ WHERE (city.id = airport.belong_city_id) AND airport.status = 'Open' AND city.co
 
 
 def generate_hotel_base_task_info():
+#     sql = '''
+#     SELECT
+#   count(*)
+# FROM ota_location
+#   LEFT JOIN city ON ota_location.city_id= city.id
+# WHERE source IN ('booking', 'agoda', 'elong', 'hotels', 'expedia', 'ctrip') and ota_location.city_id <> 'NULL'
+#     '''
     sql = '''SELECT
-  city.id AS city_id,
-  city.trans_degree,
-  city.grade,
-  ota_location.source,
-  ota_location.suggest,
-  ota_location.suggest_type,
-  ota_location.country_id
-FROM ota_location
-  LEFT JOIN city ON ota_location.city_id
-WHERE source IN ('booking', 'agoda', 'elong', 'hotels', 'expedia', 'ctrip') LIMIT 10000;'''
+      city.id AS city_id,
+      city.trans_degree,
+      city.grade,
+      ota_location.source,
+      ota_location.suggest,
+      ota_location.suggest_type,
+      ota_location.country_id
+    FROM ota_location
+      LEFT JOIN city ON ota_location.city_id= city.id
+    WHERE source IN ('booking', 'agoda', 'elong', 'hotels', 'expedia', 'ctrip');'''
 
+    #无city_id的数量为611459,有city_id的有28889。总共640348. package_id:5-1654,6-2477,7-14690,8-10068,100-611459
     for row in fetchall_ss(source_info_pool, sql):
 
         city_id = row[0]
@@ -433,9 +441,10 @@ if __name__ == '__main__':
     '''
     HotelTasks
     '''
+    logger.info('1111')
     _count = 0
     for line in generate_hotel_base_task_info():
         _count += 1
-        if _count == 100:
-            break
-        print(line)
+        # if _count == 1:
+        #     break
+        print(_count, line)

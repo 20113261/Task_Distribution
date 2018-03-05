@@ -14,7 +14,7 @@ from collections import defaultdict
 
 
 class PackageId(object):
-    def __init__(self, package_id, task_type: TaskType, update_cycle, start_date, end_date, slice_num):
+    def __init__(self, package_id, task_type: TaskType, update_cycle, start_date, end_date, slice_num, next_slice):
         self.package_id = int(package_id)
         self.update_cycle = int(update_cycle)
         self.start_date = int(start_date)
@@ -24,6 +24,7 @@ class PackageId(object):
         self.package_id = package_id
         self.update_cycle = update_cycle
         self.slice_num = slice_num
+        self.next_slice = next_slice
 
     def __eq__(self, other):
         return self.package_id == other.package_id and self.task_type == other.task_type
@@ -60,7 +61,8 @@ class PackageInfo(object):
                     update_cycle=update_cycle,
                     start_date=line['daydiff_start'],
                     end_date=line['daydiff_end'],
-                    slice_num = line['slice']
+                    slice_num=line['slice'],
+                    next_slice=line.get('next_slice')
                 )
                 __dict[task_type].append(package)
         # sort dict
@@ -69,6 +71,16 @@ class PackageInfo(object):
 
         return __dict
 
+    def alter_slice_num(self, package_obj: PackageId):
+        #修改package_info里的sice值
+        for line in self.collection.find({'id': package_obj.package_id}):
+            total_slice_num = line['update_cycle'] / 24
+        for line in self.collection.find({'id': package_obj.package_id}):
+            current_slice_num = line['slice']
+        slice_num = current_slice_num + 1 if current_slice_num < total_slice_num else current_slice_num
+        if slice_num == total_slice_num:
+            slice_num = 0
+        self.collection.update({'id': package_obj.package_id}, {'$set': {'slice': slice_num}})
 
 # if __name__ == '__main__':
 #     package_info = PackageInfo()

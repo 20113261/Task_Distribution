@@ -1,7 +1,7 @@
 from pika import adapters
 import pika
 from rabbitmq import pika_send
-from logger import Logger
+from logger_file import Logger
 
 logger = Logger().get_logger()
 consumer_connection = None
@@ -24,8 +24,8 @@ def insert_spider_result(result):
     '''
     try:
         for task_info in result:
-            task_info.pop('_id')
-            pika_send.client['case_result']['spider_result'].insert(task_info)
+            # task_info.pop('_id')
+            pika_send.client['case_result']['spider_result2'].insert(task_info)
             # logger.info('tid:%s'%(task_info['tid']))
         logger.info('完成此次爬虫入库')
     except Exception as e:
@@ -50,6 +50,13 @@ def feed_back_date_task(result):
     except Exception as e:
         logger.info(e)
         logger.info('mongo抛出异常！')
+
+
+def slave_take_times(response):
+    for line in response:
+        take_times = line['take_times'] + 1
+        pika_send.date_task_db[line['collection_name']].update({'tid': line['tid']}, {'$set': {'take_times': take_times}})
+    logger.info('完成取走次数更新')
 
 class ExampleConsumer(object):
     """This is an example consumer that will handle unexpected interactions

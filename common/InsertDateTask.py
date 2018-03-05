@@ -11,9 +11,10 @@ import random
 import pymongo
 import datetime
 import toolbox.Date
+from collections import defaultdict
 import common.patched_mongo_insert
 from model.TaskType import TaskType
-from logger import get_logger
+from logger_file import get_logger
 from conf import config, task_source
 from model.PackageInfo import PackageInfo
 from toolbox.Date import date_takes
@@ -42,6 +43,10 @@ class InsertDateTask(object):
 
         self.base_collections = self.base_task_db[self.generate_base_collections()]
 
+        #删除切片周期为1的mongo文档
+        # if self.task_type == TaskType.round_flight:
+        #     self.delete_single_slice()
+
         # 按源生成多个 collections, 多个 tasks 队列
         self.date_collections_dict = {}
         self.tasks_dict = {}
@@ -63,16 +68,21 @@ class InsertDateTask(object):
         # 数据游标前置偏移量，用于在入库时恢复游标位置
         self.pre_offset = 0
 
+    def delete_single_slice(self):
+        for collection_name in self.date_task_db.collection_names():
+            self.date_task_db[collection_name].remove({'package_id': 12})
+
     def generate_base_collections(self):
-        return "BaseTask_{}".format(str(self.task_type).split('.')[-1].title())
+        return "BaseTask_{}".format(str(self.task_type).split('.')[-1])
 
     @staticmethod
     def today():
+        # return '20180235'
         return datetime.datetime.today().strftime('%Y%m%d')
 
     def generate_date_collections(self, source):
         return "DateTask_{}_{}_{}".format(
-            str(self.task_type).split('.')[-1].title(),
+            str(self.task_type).split('.')[-1],
             source,
             self.today()
         )
@@ -108,22 +118,26 @@ class InsertDateTask(object):
         return start_n, part_num
 
     def get_total_source(self):
-        if self.task_type == TaskType.flight:
+        if self.task_type == TaskType.Flight:
             total_source = task_source.flight_source
-        elif self.task_type == TaskType.round_flight:
+        elif self.task_type == TaskType.RoundFlight:
             total_source = task_source.round_flight_source
-        elif self.task_type == TaskType.multi_flight:
+        elif self.task_type == TaskType.MultiFlight:
             total_source = task_source.multi_flight_source
+        elif self.task_type == TaskType.Hotel:
+            total_source = task_source.hotel_source
         # todo add other source
         return total_source
 
     def generate_source(self):
-        if self.task_type == TaskType.flight:
+        if self.task_type == TaskType.Flight:
             source = random.choice(task_source.flight_source)
-        elif self.task_type == TaskType.round_flight:
+        elif self.task_type == TaskType.RoundFlight:
             source = random.choice(task_source.round_flight_source)
-        elif self.task_type == TaskType.multi_flight:
+        elif self.task_type == TaskType.MultiFlight:
             source = random.choice(task_source.multi_flight_source)
+        elif self.task_type == TaskType.Hotel:
+            source = random.choice(task_source.hotel_source)
         # todo add other source
         return source
 
@@ -136,7 +150,7 @@ class InsertDateTask(object):
         :return:
         """
         # type: package_id, dict, str -> DateTask
-        if self.task_type == TaskType.flight:
+        if self.task_type == TaskType.Flight:
             # 飞机需要拼接 date
             content = each_data['task_args']['content']
             content = "{}{}".format(content, date)
@@ -150,7 +164,7 @@ class InsertDateTask(object):
             )
             return date_task
 
-        elif self.task_type == TaskType.round_flight:
+        elif self.task_type == TaskType.RoundFlight:
             content = each_data['task_args']['content']
             continent_id = each_data['task_args']['continent_id']
             if int(continent_id) == 10:
@@ -198,6 +212,26 @@ class InsertDateTask(object):
                     slice_num = slice_num
                 )
                 yield date_task
+
+        elif self.task_type == TaskType.Hotel:
+            city_id = each_data['task_args']['city_id']
+            suggest_type = each_data['task_args']['suggest_type']
+            suggest = each_data['task_args']['suggest']
+            country_id = each_data['task_args']['country_id']
+            content = "{}&{}&{}&{}".format(city_id, 2, 1, date)
+            date_task = DateTask(
+                source=source,
+                package_id=package_id,
+                task_type=self.task_type,
+                date=date,
+                content=content,
+                city_id=city_id,
+                suggest=suggest,
+                suggest_type=suggest_type,
+                country_id=country_id,
+                slice_num=slice_num
+            )
+            yield date_task
 
     def mongo_patched_insert(self, data, source):
         collections = self.date_collections_dict[source]
@@ -259,13 +293,18 @@ class InsertDateTask(object):
         self.n5 = 0
         self.n6 = 0
         self.continent = 0
+        self.count_source = defaultdict(dict)
 
         # 获取 package_id 列表
         package_id_list = self.package_info.get_package()[self.task_type]
         #package_id_list是package_info集合中符合task_type的记录列表
         for each_package_obj in package_id_list:
-            # if each_package_obj.package_id != 13:
-            #     continue
+            if each_package_obj.package_id == 100:
+                continue
+            if each_package_obj.next_slice == 0:
+                continue
+
+
             # 基础任务请求
             task_query = {
                 'task_type': self.task_type,
@@ -290,6 +329,7 @@ class InsertDateTask(object):
                                         ignore_days=each_package_obj.start_date))
 
             self.m = 0
+
             # 在BaseTask集合中查找符合task_type的记录
             for line in self.base_collections.find(
                     {
@@ -297,10 +337,18 @@ class InsertDateTask(object):
                         'package_id': each_package_obj.package_id
                     }
             ).sort([("_id", 1)]).skip(start_n).limit(part_num):
+
                 self.m += 1
-                if line['task_args']['continent_id'] in ['10']:
-                    self.continent += 1
-                source = self.generate_source()
+                # if line['task_args']['continent_id'] in ['10']:
+                #     self.continent += 1
+                if self.task_type == TaskType.Hotel:
+                    source = line['task_args']['source']
+                else:
+                    source = self.generate_source()
+
+                count = self.count_source[each_package_obj.package_id].get(source, 0)
+                self.count_source[each_package_obj.package_id][source] = count + 1
+
                 for date in date_list:
                     # 遍历当前应该有的所有日期
 
@@ -319,10 +367,13 @@ class InsertDateTask(object):
                         print(self.n)
                         self._insert_task(i)
 
+            self.package_info.alter_slice_num(each_package_obj)
+
         # 最终入库，确保最后一部分数据能够入库
         self.insert_mongo()
-
+        print(self.count_source)
 
 if __name__ == '__main__':
-    insert_date_task = InsertDateTask(task_type=TaskType.round_flight)
+
+    insert_date_task = InsertDateTask(task_type=TaskType.RoundFlight)
     insert_date_task.insert_task()

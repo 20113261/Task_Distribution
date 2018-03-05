@@ -30,8 +30,8 @@
 # for g  in g(6):
 #     print(g,end=',')
 
-import logger
+import logger_file
 
-logger = logger.Logger().get_logger()
+logger = logger_file.Logger().get_logger()
 logger.info('aab')
 

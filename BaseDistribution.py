@@ -9,7 +9,7 @@ import redis
 import json
 import datetime
 from Task import Task
-from logger import get_logger
+from logger_file import get_logger
 from collections import defaultdict
 
 logger = get_logger("BaseDistribution")
