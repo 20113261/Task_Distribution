@@ -31,7 +31,7 @@ for i in range(1000):
             result.append(t)
         logger.info('result数量:%s'%len(result))
         logger.info('从master端获取到result')
-        # time.sleep(20)
+        time.sleep(15)
         requests.get('http://{host}/complete_workload'.format(host=host), data={'q': str(result)})
         print(i+1)
         logger.info('反馈结果给master')

@@ -44,8 +44,8 @@ class InsertDateTask(object):
         self.base_collections = self.base_task_db[self.generate_base_collections()]
 
         #删除切片周期为1的mongo文档
-        # if self.task_type == TaskType.round_flight:
-        #     self.delete_single_slice()
+        if self.task_type == TaskType.Hotel:
+            self.delete_single_slice()
 
         # 按源生成多个 collections, 多个 tasks 队列
         self.date_collections_dict = {}
@@ -77,7 +77,7 @@ class InsertDateTask(object):
 
     @staticmethod
     def today():
-        # return '20180235'
+        return '20180306'
         return datetime.datetime.today().strftime('%Y%m%d')
 
     def generate_date_collections(self, source):
@@ -375,5 +375,5 @@ class InsertDateTask(object):
 
 if __name__ == '__main__':
 
-    insert_date_task = InsertDateTask(task_type=TaskType.RoundFlight)
+    insert_date_task = InsertDateTask(task_type=TaskType.Hotel)
     insert_date_task.insert_task()

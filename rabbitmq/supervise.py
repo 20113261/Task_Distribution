@@ -11,16 +11,17 @@ client = pymongo.MongoClient(host=config.mongo_host)
 date_task_db = client[config.mongo_date_task_db]
 base_task_db = client[config.mongo_base_task_db]
 
-frequency = {'12':1, '13': 4, '14':7, '5':1, '6':2, '7': 8, '8':8, '100':30}
+frequency = {'12':1, '13': 4, '14':7, '5':1, '6':2, '7': 8, '8':8}
 
-package_list = [12, 13, 14, 5, 6, 7, 8, 100]
+flight_package_list = [12, 13, 14]
+hotel_package_list = [5, 6, 7, 8]
 slices_result = defaultdict(list)
 package_count_list = {}
 update_time = datetime.datetime.now().strftime('%Y%m%d%H') + '00'
 update_day = datetime.datetime.now().strftime('%Y%m%d')
 
 #昨天的任务先发？没写？
-def query_mongo():
+def query_mongo(package_list):
     '''
     分package_id,分collection查询datetask各集合中的任务状态。
     :return:
@@ -29,10 +30,15 @@ def query_mongo():
     '''
     #slice_num要在datetask的collection里面，然后下面的查询要用到。
     for package_id in package_list:
+        # if package_id != 5:
+        #     continue
         package_count_list[package_id] = {}
-        for slice_num in range(frequency.get(str(package_id))):
+        slice_num_list = range(frequency.get(str(package_id))) if package_id != 100 else range(30)
+        for slice_num in slice_num_list:
             per_package_records_count = 0
             for collection_name in date_task_db.collection_names():
+                # if 'ctrip' not in collection_name:
+                #     continue
                 record_count = date_task_db[collection_name].find({'package_id': package_id, 'slice_num': slice_num}).count()
                 if record_count == 0:
                     continue
@@ -40,10 +46,10 @@ def query_mongo():
                 success_count = date_task_db[collection_name].find({'package_id': package_id, 'slice_num': slice_num, 'finished': 1}).count()
                 fail_count = date_task_db[collection_name].find({'package_id': package_id, 'slice_num': slice_num, 'finished': 0, 'used_times': 2}).count()
 
-                total_used_times = date_task_db[collection_name].aggregate([{'$match': {}}, {'$group':{'_id':'null','total_used_times': {'$sum':'$used_times'}}}, {'$project':{'_id':0, 'total_used_times':1}}])
+                total_used_times = date_task_db[collection_name].aggregate([{'$match':{'package_id': package_id, 'slice_num': slice_num}}, {'$group':{'_id':'null','total_used_times': {'$sum':'$used_times'}}}, {'$project':{'_id':0, 'total_used_times':1}}])
                 for used_times in total_used_times:
-                    total_used_times = used_times['total_used_times']
-                total_take_times = date_task_db[collection_name].aggregate([{'$match': {}}, {'$group':{'_id':'null', 'total_take_times': {'$sum':'$take_times'}}}, {'$project':{'_id':0, 'total_take_times':1}}])
+                    total_used_times = used_times['total_used_times'] - feedback_count
+                total_take_times = date_task_db[collection_name].aggregate([{'$match': {'package_id': package_id, 'slice_num': slice_num}}, {'$group':{'_id':'null', 'total_take_times': {'$sum':'$take_times'}}}, {'$project':{'_id':0, 'total_take_times':1}}])
                 for take_times in total_take_times:
                     total_take_times = take_times['total_take_times']
                 slices_result[package_id].append({collection_name.split('_')[-2]: {'slice_num':slice_num, 'record_count':record_count, 'feedback_count':feedback_count,
@@ -130,7 +136,7 @@ def update_dead_running():
 
 if __name__ == '__main__':
     update_dead_running()
-    slices_result, package_count_list = query_mongo()
+    slices_result, package_count_list = query_mongo(hotel_package_list)
 
     # delete_datetask_documents() #不能把当前切片的数据删除掉，否则无数据
 
