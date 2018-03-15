@@ -11,6 +11,7 @@ import random
 import pymongo
 import datetime
 import toolbox.Date
+import init_path
 from collections import defaultdict
 import common.patched_mongo_insert
 from model.TaskType import TaskType
@@ -19,11 +20,23 @@ from conf import config, task_source
 from model.PackageInfo import PackageInfo
 from toolbox.Date import date_takes
 from model.DateTask import DateTask
+from logger_file import get_logger
+
+logger = get_logger('InsertDateTask')
 
 toolbox.Date.DATE_FORMAT = '%Y%m%d'
 
 INSERT_WHEN = 2000
 
+
+def is_hotel_type(func):
+    def wrapper(self, *args):
+        if self.task_type == TaskType.Hotel:
+            for source in task_source.hotel_source:
+                func(self, source, *args)
+        else:
+            func(self, '', *args)
+    return wrapper
 
 class DateTaskList(list):
     def append_task(self, task: DateTask):
@@ -51,8 +64,7 @@ class InsertDateTask(object):
         self.date_collections_dict = {}
         self.tasks_dict = {}
         for each_source in self.get_total_source():
-            self.date_collections_dict[each_source] = self.date_task_db[
-                self.generate_date_collections(source=each_source)]
+            self.date_collections_dict[each_source] = self.generate_date_collections(source=each_source)
 
             # 建立索引
             self.create_indexes(source=each_source)
@@ -70,14 +82,14 @@ class InsertDateTask(object):
 
     def delete_single_slice(self):
         for collection_name in self.date_task_db.collection_names():
-            self.date_task_db[collection_name].remove({'package_id': 12})
+            self.date_task_db[collection_name].remove({'package_id': 5})
 
     def generate_base_collections(self):
         return "BaseTask_{}".format(str(self.task_type).split('.')[-1])
 
     @staticmethod
     def today():
-        return '20180306'
+        # return '20180328'
         return datetime.datetime.today().strftime('%Y%m%d')
 
     def generate_date_collections(self, source):
@@ -88,7 +100,7 @@ class InsertDateTask(object):
         )
 
     def create_indexes(self, source):
-        collections = self.date_collections_dict[source]
+        collections = self.date_task_db[self.date_collections_dict[source]]
         collections.create_index([('package_id', 1)])
         collections.create_index([('tid', 1)], unique=True)
         self.logger.info("[完成索引建立]")
@@ -141,7 +153,7 @@ class InsertDateTask(object):
         # todo add other source
         return source
 
-    def generate_date_task(self, source, package_id, each_data, date, slice_num):
+    def generate_date_task(self, source, package_id, each_data, date, slice_num, collection_name):
         """
         用于生成带有日期的任务
         :param package_id:
@@ -160,9 +172,11 @@ class InsertDateTask(object):
                 package_id=package_id,
                 task_type=self.task_type,
                 date=date,
-                content=content
+                content=content,
+                slice_num=slice_num,
+                collection_name=collection_name
             )
-            return date_task
+            yield date_task
 
         elif self.task_type == TaskType.RoundFlight:
             content = each_data['task_args']['content']
@@ -209,7 +223,8 @@ class InsertDateTask(object):
                     date=datetime.datetime.strftime(date, '%Y%m%d') + '&' + round_date,
                     content=content,
                     continent_id=continent_id,
-                    slice_num = slice_num
+                    slice_num=slice_num,
+                    collection_name=collection_name
                 )
                 yield date_task
 
@@ -229,18 +244,22 @@ class InsertDateTask(object):
                 suggest=suggest,
                 suggest_type=suggest_type,
                 country_id=country_id,
-                slice_num=slice_num
+                slice_num=slice_num,
+                collection_name=collection_name
             )
             yield date_task
 
     def mongo_patched_insert(self, data, source):
-        collections = self.date_collections_dict[source]
-        with mock.patch(
-                'pymongo.collection.Collection._insert',
-                common.patched_mongo_insert.Collection._insert
-        ):
-            result = collections.insert(data, continue_on_error=True)
-            return result
+        try:
+            collections = self.date_task_db[self.date_collections_dict[source]]
+            with mock.patch(
+                    'pymongo.collection.Collection._insert',
+                    common.patched_mongo_insert.Collection._insert
+            ):
+                result = collections.insert(data, continue_on_error=True)
+                return result
+        except Exception as e:
+            logger.error("发生异常", exc_info=1)
 
     def __insert_mongo(self, source):
         if len(self.tasks_dict[source]) > 0:
@@ -284,6 +303,96 @@ class InsertDateTask(object):
         else:
             raise TypeError('错误的 args 类型 < {0} >'.format(type(date_task).__name__))
 
+    @is_hotel_type
+    def insert_data(self, source, each_package_obj):
+        # 基础任务请求
+        if self.task_type == TaskType.Hotel:
+            task_query = {
+                'task_args.source': source,
+                'task_type': self.task_type,
+                'package_id': each_package_obj.package_id
+            }
+        else:
+            task_query = {
+                'task_type': self.task_type,
+                'package_id': each_package_obj.package_id
+            }
+
+        # self.base_collections是BaseTask集合。 计算基础任务计数
+        try:
+            _task_n = self.base_collections.count(task_query)
+        except Exception as e:
+            logger.error("发生异常", exc_info=1)
+
+        # 本次任务生成份数
+        _split_n = int(each_package_obj.update_cycle / 24)
+
+        # 获取 start 位置以及生成份数
+        start_n, part_num = self.generate_package_start_and_part_num(
+            task_n=_task_n,
+            split_n=_split_n,
+            package_id=each_package_obj.package_id
+        )
+
+        # 生成全量的 date 列表
+        date_list = list(date_takes(each_package_obj.end_date - each_package_obj.start_date,
+                                    ignore_days=each_package_obj.start_date))
+
+        self.m = 0
+
+        if self.task_type == TaskType.Hotel:
+            query = {
+                    'task_args.source': source,
+                    'task_type': self.task_type,
+                    'package_id': each_package_obj.package_id
+                }
+        else:
+            query = {
+                    'task_type': self.task_type,
+                    'package_id': each_package_obj.package_id
+                }
+        # 在BaseTask集合中查找符合task_type的记录
+        try:
+            for line in self.base_collections.find(query).sort([("_id", 1)]).skip(start_n).limit(part_num):
+                self.m += 1
+                # if line['task_args']['continent_id'] in ['10']:
+                #     self.continent += 1
+                if self.task_type == TaskType.Hotel:
+                    source = line['task_args']['source']
+                    collection_name = self.date_collections_dict[source]
+                else:
+                    source = self.generate_source()
+                    collection_name = self.date_collections_dict[source]
+
+                count = self.count_source[each_package_obj.package_id].get(source, 0)
+                self.count_source[each_package_obj.package_id][source] = count + 1
+
+                for date in date_list:
+                    # 遍历当前应该有的所有日期
+
+                    # 生成新的日期任务
+                    date_task = self.generate_date_task(
+                        source,
+                        package_id=each_package_obj.package_id,
+                        each_data=line,
+                        date=date,
+                        slice_num=each_package_obj.slice_num,
+                        collection_name=collection_name
+                    )
+
+                    # 插入新的日期任务
+                    for i in date_task:
+                        self.n += 1
+                        logger.info(self.n)
+                        self._insert_task(i)
+        except Exception as e:
+            logger.error("发生异常", exc_info=1)
+
+        # 最终入库，确保最后一部分数据能够入库
+        self.insert_mongo()
+        logger.info(self.count_source)
+
+
     def insert_task(self):
         self.n = 0
         self.n1 = 0
@@ -299,79 +408,14 @@ class InsertDateTask(object):
         package_id_list = self.package_info.get_package()[self.task_type]
         #package_id_list是package_info集合中符合task_type的记录列表
         for each_package_obj in package_id_list:
-            if each_package_obj.package_id == 100:
+            if each_package_obj.package_id in [100, 5, 6]:
                 continue
             if each_package_obj.next_slice == 0:
                 continue
-
-
-            # 基础任务请求
-            task_query = {
-                'task_type': self.task_type,
-                'package_id': each_package_obj.package_id
-            }
-
-            # self.base_collections是BaseTask集合。 计算基础任务计数
-            _task_n = self.base_collections.count(task_query)
-
-            # 本次任务生成份数
-            _split_n = int(each_package_obj.update_cycle / 24)
-
-            # 获取 start 位置以及生成份数
-            start_n, part_num = self.generate_package_start_and_part_num(
-                task_n=_task_n,
-                split_n=_split_n,
-                package_id=each_package_obj.package_id
-            )
-
-            # 生成全量的 date 列表
-            date_list = list(date_takes(each_package_obj.end_date - each_package_obj.start_date,
-                                        ignore_days=each_package_obj.start_date))
-
-            self.m = 0
-
-            # 在BaseTask集合中查找符合task_type的记录
-            for line in self.base_collections.find(
-                    {
-                        'task_type': self.task_type,
-                        'package_id': each_package_obj.package_id
-                    }
-            ).sort([("_id", 1)]).skip(start_n).limit(part_num):
-
-                self.m += 1
-                # if line['task_args']['continent_id'] in ['10']:
-                #     self.continent += 1
-                if self.task_type == TaskType.Hotel:
-                    source = line['task_args']['source']
-                else:
-                    source = self.generate_source()
-
-                count = self.count_source[each_package_obj.package_id].get(source, 0)
-                self.count_source[each_package_obj.package_id][source] = count + 1
-
-                for date in date_list:
-                    # 遍历当前应该有的所有日期
-
-                    # 生成新的日期任务
-                    date_task = self.generate_date_task(
-                        source,
-                        package_id=each_package_obj.package_id,
-                        each_data=line,
-                        date=date,
-                        slice_num=each_package_obj.slice_num
-                    )
-
-                    # 插入新的日期任务
-                    for i in date_task:
-                        self.n += 1
-                        print(self.n)
-                        self._insert_task(i)
+            self.insert_data(each_package_obj)
 
             self.package_info.alter_slice_num(each_package_obj)
 
-        # 最终入库，确保最后一部分数据能够入库
-        self.insert_mongo()
-        print(self.count_source)
 
 if __name__ == '__main__':
 

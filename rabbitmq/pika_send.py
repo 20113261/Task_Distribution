@@ -2,15 +2,14 @@ import tornado.ioloop
 import tornado.web
 import pika
 from pika.adapters.tornado_connection import TornadoConnection
-import logging
-import logging.config
 import pymongo
 from conf import task_source, config
 from functools import partial
+from logger_file import get_logger
 from bson.objectid import ObjectId
 
 
-logger = logging.getLogger('mq:')
+logger = get_logger('pika_send')
 TORNADO_PORT = 8889
 # RMQ_USER = 'user'
 # RMQ_PWD = 'password'
@@ -19,8 +18,6 @@ TORNADO_PORT = 8889
 #
 IOLOOP_TIMEOUT = 500
 
-# configure my logger
-# logging.config.fileConfig('log.conf')
 
 # holds channel objects
 

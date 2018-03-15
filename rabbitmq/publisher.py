@@ -318,7 +318,7 @@ class ExamplePublisher(object):
         # time.sleep(10)
         # final_distribute_result = {'DateTask_Round_Flight_cheapticketsRoundFlight_20180202': [(12, 824), (13, 57)]}
         for queue_name, message_count in self.MESSAGE_COUNT_LIST.items():
-            if message_count < 10000:
+            if message_count < 1000:
                 for collection_name, mongo_tuple_list in final_distribute_result.items():
                     for line in insert_mongo_data(queue_name, collection_name, mongo_tuple_list):
                         print('line: %s'% (str(line)))

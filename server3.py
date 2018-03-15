@@ -18,7 +18,7 @@ import datetime
 import math
 import pika
 import traceback
-from logger_file import Logger
+from logger_file import get_logger
 from bson import json_util
 from bson.objectid import ObjectId
 from rabbitmq import pika_send
@@ -32,11 +32,10 @@ from pika.adapters.blocking_connection import BlockingConnection
 from pika.adapters.tornado_connection import TornadoConnection
 from tornado.locks import Condition
 
+logger = get_logger('server3')
 port = config.server_port
 define("port", default=port, help="Run server on a specific port", type=int)
 tornado.options.parse_command_line()
-
-logger = Logger().get_logger()
 
 class GetTask(tornado.web.RequestHandler):
     executor = ThreadPoolExecutor(20)
@@ -48,7 +47,7 @@ class GetTask(tornado.web.RequestHandler):
         print("Hello World")
         self.data_type = self.get_argument('data_type', '').strip()
         # self.data_type = date_type.split('_')
-        self.request_count = math.ceil(int(self.get_argument('count', '0').strip())/5)
+        self.request_count = math.ceil(float(self.get_argument('count', '0').strip())/6)
         yield [self.run()]
         self.condition = Condition()
 
@@ -182,7 +181,7 @@ class FeedBack(tornado.web.RequestHandler):
 #         task_list = json.loads(task_info)
 #         self.write('')
 #         yield self.async_get(task_list)
-#
+
 
 
 

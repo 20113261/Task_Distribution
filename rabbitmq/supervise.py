@@ -1,15 +1,18 @@
 import pymongo
 import datetime
 import init_path
-from conf import config
+from conf.config import mongo_host, mongo_base_task_db, mongo_date_task_db, used_times_config
 from collections import defaultdict
-from mysql_execute import update_monitor
+from mysql_execute import update_monitor, update_code
 from logger_file import get_logger
+from conf import task_source
+from model.TaskType import TaskType
 
+logger = get_logger('supervise')
 
-client = pymongo.MongoClient(host=config.mongo_host)
-date_task_db = client[config.mongo_date_task_db]
-base_task_db = client[config.mongo_base_task_db]
+client = pymongo.MongoClient(host=mongo_host)
+date_task_db = client[mongo_date_task_db]
+base_task_db = client[mongo_base_task_db]
 
 frequency = {'12':1, '13': 4, '14':7, '5':1, '6':2, '7': 8, '8':8}
 
@@ -20,7 +23,6 @@ package_count_list = {}
 update_time = datetime.datetime.now().strftime('%Y%m%d%H') + '00'
 update_day = datetime.datetime.now().strftime('%Y%m%d')
 
-#昨天的任务先发？没写？
 def query_mongo(package_list):
     '''
     分package_id,分collection查询datetask各集合中的任务状态。
@@ -42,18 +44,23 @@ def query_mongo(package_list):
                 record_count = date_task_db[collection_name].find({'package_id': package_id, 'slice_num': slice_num}).count()
                 if record_count == 0:
                     continue
-                feedback_count = date_task_db[collection_name].find({'package_id': package_id, 'slice_num': slice_num, 'used_times': {'$gte': 1}}).count()
+                feedback_count = date_task_db[collection_name].aggregate([{'$match': {'package_id': package_id, 'slice_num': slice_num}}, {'$group':{'_id': 'feedback_times', 'counter':{'$sum':'$feedback_times'}}}])
+                for i in feedback_count:
+                    feedback_count = i['counter']
                 success_count = date_task_db[collection_name].find({'package_id': package_id, 'slice_num': slice_num, 'finished': 1}).count()
-                fail_count = date_task_db[collection_name].find({'package_id': package_id, 'slice_num': slice_num, 'finished': 0, 'used_times': 2}).count()
+                fail_count = date_task_db[collection_name].find({'package_id': package_id, 'slice_num': slice_num, 'finished': 0, 'used_times': {'$gte': used_times_config}}).count()
+                task_progress = (success_count + fail_count) / record_count
 
+                used_count = date_task_db[collection_name].find({'package_id': package_id, 'slice_num': slice_num, 'used_times': {'$gte': 1}}).count()
                 total_used_times = date_task_db[collection_name].aggregate([{'$match':{'package_id': package_id, 'slice_num': slice_num}}, {'$group':{'_id':'null','total_used_times': {'$sum':'$used_times'}}}, {'$project':{'_id':0, 'total_used_times':1}}])
                 for used_times in total_used_times:
-                    total_used_times = used_times['total_used_times'] - feedback_count
+                    total_used_times = used_times['total_used_times'] - used_count
                 total_take_times = date_task_db[collection_name].aggregate([{'$match': {'package_id': package_id, 'slice_num': slice_num}}, {'$group':{'_id':'null', 'total_take_times': {'$sum':'$take_times'}}}, {'$project':{'_id':0, 'total_take_times':1}}])
                 for take_times in total_take_times:
                     total_take_times = take_times['total_take_times']
                 slices_result[package_id].append({collection_name.split('_')[-2]: {'slice_num':slice_num, 'record_count':record_count, 'feedback_count':feedback_count,
-                                'success_count':success_count, 'fail_count':fail_count, 'total_used_times': total_used_times, 'total_take_times':total_take_times}})
+                                'success_count':success_count, 'fail_count':fail_count, 'total_used_times': total_used_times, 'total_take_times':total_take_times,
+                                'raw_used_times':used_times['total_used_times'], 'task_progress':task_progress}})
 
                 per_package_records_count += record_count
             package_count_list[package_id][slice_num] = per_package_records_count
@@ -61,25 +68,6 @@ def query_mongo(package_list):
     print(slices_result)
     print(package_count_list) #bug:每次生成的总次数不一致。
     return slices_result, package_count_list
-
-def delete_datetask_documents():
-    '''
-    刪除已发完任务的文档,不能在监控中使用，因为会把失败的任务删掉从而被绿皮过滤掉。
-    :return:
-    '''
-    delete_documents = defaultdict(dict)
-    # 插入分源、分package_id，所有完成反馈任务的切片最大值信息
-    for package_id, source, source_info in get_source_info():
-        if source_info['record_count'] == source_info['fail_count'] + source_info['success_count']:
-            if source_info['slice_num'] >= delete_documents.get(source, {}).get(package_id, {}).get('slice_num', 0):
-                delete_documents[source][package_id] = source_info
-    #删除小于当前完成反馈切片的mongo文档数据
-    for delete_source, delete_info in delete_documents.items():
-        for collection_name in date_task_db.collection_names():
-            if delete_source in collection_name:
-                for package_id, source_info in delete_info.items():
-                    date_task_db[collection_name].remove({'slice_num': {'$lte': source_info['slice_num']}, 'package_id': package_id})
-    print(delete_documents)
 
 
 def update_package_info_collection(package_count_list):
@@ -114,11 +102,12 @@ def update_task_list_in_mysql():
     conn_pool = task_db_monitor_db_pool
     sql_list = []
     for package_id, source, source_info in get_source_info():
-        sql_insert = '''replace into task_day_list_monitor (source,package_id,slice_num,frequency,total_generated,retrieve_count,
-                      feedback_count,success_count,fail_count,datetime,date,total_take_times,total_used_times)
-                      VALUE ("%s",%d,%d,%d,%d,%d,%d,%d,%d,%s,%s,%d,%d);'''%(source,package_id,source_info['slice_num'],frequency.get(str(package_id)),
-                      source_info['record_count'],0,source_info['feedback_count'],source_info['success_count'],
-                        source_info['fail_count'],update_time,update_day,source_info['total_take_times'],source_info['total_used_times'])
+        sql_insert = '''replace into task_day_list_monitor (source,package_id,slice_num,frequency,total_generated,
+                      feedback_count,success_count,fail_count,datetime,date,total_take_times,total_used_times,raw_used_times,task_progress)
+                      VALUE ("%s",%d,%d,%d,%d,%d,%d,%d,%s,%s,%d,%d,%d,%f);'''%(source,package_id,source_info['slice_num'],frequency.get(str(package_id)),
+                      source_info['record_count'],source_info['feedback_count'],source_info['success_count'],
+                      source_info['fail_count'],update_time,update_day,source_info['total_take_times'],
+                      source_info['total_used_times'],source_info['raw_used_times'],source_info['task_progress'])
         sql_list.append(sql_insert)
     update_monitor(conn_pool, sql_list, update_time)
 
@@ -129,22 +118,63 @@ def get_source_info():
             for source, source_info in source_content.items():
                 yield package_id, source, source_info #source_info:任务概览，eg:{'record_count': 32425, 'fail_count': 0, 'feedback_count': 101, 'slice_num': 0, 'success_count': 0}
 
+
 def update_dead_running():
-    supervise_time = datetime.datetime.now()+ datetime.timedelta(minutes=20)
+    supervise_time = datetime.datetime.now()+ datetime.timedelta(minutes=-60) #注意此处一定为负数！
     for collection_name in date_task_db.collection_names():
-        date_task_db[collection_name].update({'run': 1, 'update_time': {'$lt': supervise_time}}, {'$set': {'run': 0}}, multi=True)
+        date_task_db[collection_name].update({'run': 1, 'update_time': {'$lt': supervise_time}}, {'$inc':{'used_times': 1}}, multi=True)
+        date_task_db[collection_name].update({'run': 1, 'update_time': {'$lt': supervise_time}},
+                                             {'$set': {'run': 0}}, multi=True)
+
+def update_error_code_counter(task_type):
+    today = datetime.datetime.today().strftime('%Y%m%d')
+    from conn_pool import task_db_monitor_db_pool
+    conn_pool = task_db_monitor_db_pool
+    today = datetime.datetime.today().strftime('%Y%m%d')
+    task_type = str(task_type).split('.')[-1]
+    if task_type == 'Hotel':
+        source_list = task_source.hotel_source
+    elif task_type == 'RoundFlight':
+        source_list = task_source.round_flight_source
+    sql_list = []
+    # error_code_list = task_source.error_code_list
+    for source in source_list:
+        code_statistics = client['case_result'][today].aggregate([{'$match': {'source':{'$regex':source}}}, {'$group': {'_id': '$error', 'counter': {'$sum': 1}}}])
+        code_counter = {}
+        error_count = 0
+        for line in code_statistics:
+            print(line)
+            code = '_{}_'.format(line['_id'])
+            counter = line['counter']
+            code_counter[code] = counter
+            error_count += counter
+        code_list = ''
+        counter_list = ''
+
+        for code, counter in code_counter.items():
+            code_list += code
+            code_list += ','
+            counter_list += str(counter)
+            counter_list += ','
+        code_list = code_list.rstrip(',')
+        counter_list = counter_list.rstrip(',')
+        sql = '''replace into task_error_code_counter (source, date, type, error_count, {}) VALUE('{}','{}','{}', {}, {}); '''.format(code_list, source, today, task_type, error_count, counter_list)
+        sql_list.append(sql)
+    update_code(conn_pool, sql_list)
 
 if __name__ == '__main__':
+    logger.info('开始绿皮的更新：')
     update_dead_running()
+    logger.info('更新酒店：')
     slices_result, package_count_list = query_mongo(hotel_package_list)
-
-    # delete_datetask_documents() #不能把当前切片的数据删除掉，否则无数据
-
+    update_package_info_collection(package_count_list)
+    update_task_list_in_mysql()
+    logger.info('更新飞机：')
+    slices_result, package_count_list = query_mongo(flight_package_list)
     update_package_info_collection(package_count_list)
     update_task_list_in_mysql()
 
-    # supervise_time = datetime.datetime.now()+ datetime.timedelta(minutes=-1)
-    # date_task_db['DateTask_Round_Flight_cleartripRoundFlight_20180234'].update({'run': 1, 'update_time': {'$lt': supervise_time}}, {'$set': {'run': 0}},
-    #                                      multi=True)
-    print('wanle')
+    update_error_code_counter(task_type=TaskType.Hotel)
+    update_error_code_counter(task_type=TaskType.RoundFlight)
+    logger.info('完成本次绿皮更新！')
 

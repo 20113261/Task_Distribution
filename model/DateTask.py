@@ -18,7 +18,7 @@ class DateTask(object):
         self.package_id = package_id
         self.task_type = task_type
         self.date = date
-
+        self.collection_name = kwargs['collection_name']
         self.task_args = {
             'source': self.source,
             'content': kwargs.get('content', ''),
@@ -49,6 +49,8 @@ class DateTask(object):
         self.update_time = datetime.datetime.now()
         #取走次數
         self.take_times = 0
+        #反馈次数
+        self.feedback_times = 0
 
     def generate_tid(self):
         if self.task_type in (TaskType.Flight, TaskType.RoundFlight, TaskType.MultiFlight, TaskType.Hotel):

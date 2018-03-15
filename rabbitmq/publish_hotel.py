@@ -5,13 +5,13 @@ import logging
 import pika
 import json
 import time
-print(sys.path)
+from logger_file import get_logger
 # from mysql_execute import update_monitor
 # from logger_file import get_logger
 from rabbitmq.producter import final_distribute, insert_mongo_data, update_running
 LOG_FORMAT = ('%(levelname) -10s %(asctime)s %(name) -30s %(funcName) '
                 '-35s %(lineno) -5d: %(message)s')
-LOGGER = logging.getLogger(__name__)
+logger = get_logger('publish_hotel')
 
 
 class ExamplePublisher(object):
@@ -29,11 +29,13 @@ class ExamplePublisher(object):
     """
     EXCHANGE = 'xiaopeng'
     EXCHANGE_TYPE = 'direct'
-    PUBLISH_INTERVAL = 300
+    PUBLISH_INTERVAL = 200
     QUEUE = 'hello2'
     ROUTING_KEY = 'hello2'
     QUEUE_LIST = ['agodaListHotel', 'bookingListHotel', 'ctripListHotel', 'elongListHotel', 'expediaListHotel', 'hotelsListHotel']
     MESSAGE_COUNT_LIST = {}
+    IS_PUBLISHING = False
+    CONFIRMATION_TIME = 0
 
     def __init__(self, amqp_url):
         """Setup the example publisher object, passing in the URL we will use
@@ -63,7 +65,7 @@ class ExamplePublisher(object):
         :rtype: pika.SelectConnection
 
         """
-        LOGGER.info('Connecting to %s', self._url)
+        logger.info('Connecting to %s', self._url)
         return pika.SelectConnection(pika.URLParameters(self._url),
                                      on_open_callback=self.on_connection_open,
                                      on_close_callback=self.on_connection_closed,
@@ -77,7 +79,7 @@ class ExamplePublisher(object):
         :type unused_connection: pika.SelectConnection
 
         """
-        LOGGER.info('Connection opened')
+        logger.info('Connection opened')
 
         self.open_channel()
 
@@ -95,7 +97,7 @@ class ExamplePublisher(object):
         if self._stopping:
             self._connection.ioloop.stop()
         else:
-            LOGGER.warning('Connection closed, reopening in 5 seconds: (%s) %s',
+            logger.warning('Connection closed, reopening in 5 seconds: (%s) %s',
                            reply_code, reply_text)
             self._connection.add_timeout(5, self._connection.ioloop.stop)
 
@@ -106,7 +108,7 @@ class ExamplePublisher(object):
         will be invoked.
 
         """
-        LOGGER.info('Creating a new channel')
+        logger.info('Creating a new channel')
         self._connection.channel(on_open_callback=self.on_channel_open)
 
     def on_channel_open(self, channel):
@@ -118,7 +120,7 @@ class ExamplePublisher(object):
         :param pika.channel.Channel channel: The channel object
 
         """
-        LOGGER.info('Channel opened')
+        logger.info('Channel opened')
         self._channel = channel
         self.add_on_channel_close_callback()
         self.setup_exchange(self.EXCHANGE)
@@ -128,7 +130,7 @@ class ExamplePublisher(object):
         RabbitMQ unexpectedly closes the channel.
 
         """
-        LOGGER.info('Adding channel close callback')
+        logger.info('Adding channel close callback')
         self._channel.add_on_close_callback(self.on_channel_closed)
 
     def on_channel_closed(self, channel, reply_code, reply_text):
@@ -143,7 +145,7 @@ class ExamplePublisher(object):
         :param str reply_text: The text reason the channel was closed
 
         """
-        LOGGER.warning('Channel was closed: (%s) %s', reply_code, reply_text)
+        logger.warning('Channel was closed: (%s) %s', reply_code, reply_text)
         self._channel = None
         # if not self._stopping:
         #     self._connection.close()
@@ -156,7 +158,7 @@ class ExamplePublisher(object):
         :param str|unicode exchange_name: The name of the exchange to declare
 
         """
-        LOGGER.info('Declaring exchange %s', exchange_name)
+        logger.info('Declaring exchange %s', exchange_name)
         self._channel.exchange_declare(self.on_exchange_declareok,
                                        exchange_name,
                                        self.EXCHANGE_TYPE)
@@ -168,7 +170,7 @@ class ExamplePublisher(object):
         :param pika.Frame.Method unused_frame: Exchange.DeclareOk response frame
 
         """
-        LOGGER.info('Exchange declared')
+        logger.info('Exchange declared')
         # self.setup_queue('cheapticketsRoundFlight')
         for queue_name in self.QUEUE_LIST:
             self.setup_queue(queue_name)
@@ -181,7 +183,7 @@ class ExamplePublisher(object):
         :param str|unicode queue_name: The name of the queue to declare.
 
         """
-        LOGGER.info('Declaring queue %s', queue_name)
+        logger.info('Declaring queue %s', queue_name)
         self._channel.queue_declare(self.on_queue_declareok, queue_name)
 
     def on_queue_declareok(self, method_frame):
@@ -197,7 +199,7 @@ class ExamplePublisher(object):
         message_count = method_frame.method.message_count
         print('message_count is %d'%message_count)
         self.MESSAGE_COUNT_LIST[method_frame.method.queue] = message_count
-        LOGGER.info('Binding %s to %s with %s',
+        logger.info('Binding %s to %s with %s',
                     self.EXCHANGE, method_frame.method.queue, self.ROUTING_KEY)
         self._channel.queue_bind(self.on_bindok, method_frame.method.queue,
                                  self.EXCHANGE, method_frame.method.queue,)
@@ -206,7 +208,7 @@ class ExamplePublisher(object):
         """This method is invoked by pika when it receives the Queue.BindOk
         response from RabbitMQ. Since we know we're now setup and bound, it's
         time to start publishing."""
-        LOGGER.info('Queue bound')
+        logger.info('Queue bound')
         # self.start_publishing()
 
     def start_publishing(self):
@@ -214,21 +216,20 @@ class ExamplePublisher(object):
         first message to be sent to RabbitMQ
 
         """
-        LOGGER.info('Issuing consumer related RPC commands')
+        self.start_publish_time = time.time()
+        logger.info('Issuing consumer related RPC commands')
         self.enable_delivery_confirmations()
         # self.schedule_next_message() 注释掉此，直接publish_message
         # for i in range(10):
         #     self.publish_message('wang xiao tang%d'%i)
-        self.setup_exchange(self.EXCHANGE)
+        # self.setup_exchange(self.EXCHANGE)
         # for queue_name in self.QUEUE_LIST:
         #     # self._channel.queue_delete(callback=None, queue=queue_name, nowait=True)
         #     self.setup_queue(queue_name)
         self.publish_message()
-        # time.sleep(5)
-        LOGGER.info('*'*30)
-
-        self.start_next_publishing()
-
+        logger.info('*' * 30)
+        self.calculate_wait_time()
+        # self.start_next_publishing()
 
     def enable_delivery_confirmations(self):
         """Send the Confirm.Select RPC method to RabbitMQ to enable delivery
@@ -241,7 +242,7 @@ class ExamplePublisher(object):
         is confirming or rejecting.
 
         """
-        LOGGER.info('Issuing Confirm.Select RPC command')
+        logger.info('Issuing Confirm.Select RPC command')
         self._channel.confirm_delivery(self.on_delivery_confirmation)
 
     def on_delivery_confirmation(self, method_frame):
@@ -257,8 +258,9 @@ class ExamplePublisher(object):
         :param pika.frame.Method method_frame: Basic.Ack or Basic.Nack frame
 
         """
+        self.CONFIRMATION_TIME = time.time()
         confirmation_type = method_frame.method.NAME.split('.')[1].lower()
-        LOGGER.info('Received %s for delivery tag: %i',
+        logger.info('Received %s for delivery tag: %i',
                     confirmation_type,
                     method_frame.method.delivery_tag)
         if confirmation_type == 'ack':
@@ -266,27 +268,40 @@ class ExamplePublisher(object):
         elif confirmation_type == 'nack':
             self._nacked += 1
         self._deliveries.remove(method_frame.method.delivery_tag)
-        LOGGER.info('Published %i messages, %i have yet to be confirmed, '
+        logger.info('Published %i messages, %i have yet to be confirmed, '
                     '%i were acked and %i were nacked',
                     self._message_number, len(self._deliveries),
                     self._acked, self._nacked)
+        #如果为取尽
+        if len(self._deliveries) == 0:
+            logger.info('已取尽队列消息, 关闭连接！')
+            self.stop()
 
     def schedule_next_message(self):
         """If we are not closing our connection to RabbitMQ, schedule another
         message to be delivered in PUBLISH_INTERVAL seconds.
 
         """
-        LOGGER.info('Scheduling next message for %0.1f seconds',
+        logger.info('Scheduling next message for %0.1f seconds',
                     self.PUBLISH_INTERVAL)
         self._connection.add_timeout(self.PUBLISH_INTERVAL,
                                      self.publish_message)
 
-
     def start_next_publishing(self):
         """自己定义此方法，各5分钟publish"""
-        LOGGER.info('Scheduling next message for %0.1f seconds',
+        logger.info('Scheduling next message for %0.1f seconds',
                     self.PUBLISH_INTERVAL)
         self._connection.add_timeout(self.PUBLISH_INTERVAL, self.start_publishing)
+
+    def calculate_wait_time(self):
+        """计算等待时间"""
+        if self.CONFIRMATION_TIME:
+            wait_interval = time.time() - self.CONFIRMATION_TIME
+            logger.info('waited time:%d' % wait_interval)
+            if wait_interval > 30:
+                logger.info('超时等待，已关闭连接！')
+                self.stop()
+        self._connection.add_timeout(5, self.calculate_wait_time)
 
     def publish_message(self): #增加入队的mongo数据
         """If the class is not stopping, publish a message to RabbitMQ,
@@ -301,9 +316,14 @@ class ExamplePublisher(object):
         class.
 
         """
-
-        if self._channel is None or not self._channel.is_open:
-            return
+        logger.info('publish_message')
+        # if self._channel is None or not self._channel.is_open:
+        #     logger.info(self._channel)
+        #     if (self._connection is not None and
+        #             not self._connection.is_closed):
+        #         # Finish closing
+        #         self._connection.ioloop.stop()
+        #     return
 
         # hdrs = {u'مفتاح': u' قيمة',
         #         u'键': u'值',
@@ -311,37 +331,44 @@ class ExamplePublisher(object):
         # properties = pika.BasicProperties(app_id='example-publisher',
         #                                   content_type='application/json',
         #                                   headers=hdrs)
+        try:
+            final_distribute_result = final_distribute('Hotel')
+            # final_distribute_result = {'DateTask_Round_Flight_cheapticketsRoundFlight_20180202': [(12, 824), (13, 57)]}
+            logger.info(final_distribute_result)
+            for queue_name, message_count in self.MESSAGE_COUNT_LIST.items():
+                if message_count < 1000:
+                    for collection_name, mongo_tuple_list in final_distribute_result.items():
+                        for line in insert_mongo_data(queue_name, collection_name, mongo_tuple_list):
+                            self.IS_PUBLISHING = True
+                            try:
+                                print('line: %s'% (str(line)))
+                            except Exception as e:
+                                pass
+                            content = line['task_args']['content'] #注意往返飞机要拼接上日期，酒店不用
+                            source = line['source']
+                            content_list = content.split('&')
+                            content_list.insert(2, source)
+                            workload_key = '_'.join(content_list)
+                            data = {"content": content, "error":-1,"id":line['tid'], "is_assigned":0,"priority":0,
+                                    "proxy":"10.10.114.35","score":"-100","source":source, "success_times":0,
+                                    "timeslot":208,"update_times":0,"workload_key": workload_key,
+                                    "used_times": line['used_times'], "take_times": line['take_times'], "suggest": line['task_args']['suggest'],
+                                    "suggest_type": line['task_args']['suggest_type'], "city_id": line['task_args']['city_id'],
+                                    "tid":line['tid']}
+                            self._channel.basic_publish('xiaopeng', queue_name,
+                                                   str(data)
+                                                   )
+                            update_running(collection_name, line['tid'], 1)
 
-        print('MESSAGE_COUNT_LIST:', self.MESSAGE_COUNT_LIST)
-        final_distribute_result = final_distribute('Hotel')
-        print('final_distribute_result', final_distribute_result)
-        # time.sleep(10)
-        # final_distribute_result = {'DateTask_Round_Flight_cheapticketsRoundFlight_20180202': [(12, 824), (13, 57)]}
-        for queue_name, message_count in self.MESSAGE_COUNT_LIST.items():
-            if message_count < 10000:
-                for collection_name, mongo_tuple_list in final_distribute_result.items():
-                    for line in insert_mongo_data(queue_name, collection_name, mongo_tuple_list):
-                        print('line: %s'% (str(line)))
-                        content = line['task_args']['content'] #注意往返飞机要拼接上日期，酒店不用
-                        source = line['source']
-                        content_list = content.split('&')
-                        content_list.insert(2, source)
-                        workload_key = '_'.join(content_list)
-                        data = {"content": content, "error":-1,"id":line['tid'], "is_assigned":0,"priority":0,
-                                "proxy":"10.10.114.35","score":"-100","source":source, "success_times":0,
-                                "timeslot":208,"update_times":0,"workload_key": workload_key,
-                                "used_times": line['used_times'], "take_times": line['take_times'], "suggest": line['task_args']['suggest'],
-                                "suggest_type": line['task_args']['suggest_type'], "city_id": line['task_args']['city_id'],
-                                "tid":line['tid']}
-                        self._channel.basic_publish('xiaopeng', queue_name,
-                                               str(data)
-                                               )
-                        update_running(collection_name, line['tid'], 1)
-
-                        self._message_number += 1
-                        self._deliveries.append(self._message_number)
-                        LOGGER.info('Published message # %i', self._message_number)
-                        # self.schedule_next_message()
+                            self._message_number += 1
+                            self._deliveries.append(self._message_number)
+                            logger.info('Published message # %i', self._message_number)
+                            # self.schedule_next_message()
+            if self.IS_PUBLISHING is False:
+                logger.info('不生产消息，马上关闭连接！')
+                self.stop()
+        except Exception as e:
+            logger.error("发生异常", exc_info=1)
 
     def run(self):
         """Run the example code by connecting and then starting the IOLoop.
@@ -366,10 +393,7 @@ class ExamplePublisher(object):
                     # Finish closing
                     self._connection.ioloop.start()
 
-        LOGGER.info('Stopped')
-
-    def print_(self):
-        print('66'*20)
+        logger.info('Stopped')
 
     def stop(self):
         """Stop the example by closing the channel and connection. We
@@ -380,7 +404,7 @@ class ExamplePublisher(object):
         disconnect from RabbitMQ.
 
         """
-        LOGGER.info('Stopping')
+        logger.info('Stopping')
         self._stopping = True
         self.close_channel()
         self.close_connection()
@@ -391,13 +415,13 @@ class ExamplePublisher(object):
 
         """
         if self._channel is not None:
-            LOGGER.info('Closing the channel')
+            logger.info('Closing the channel')
             self._channel.close()
 
     def close_connection(self):
         """This method closes the connection to RabbitMQ."""
         if self._connection is not None:
-            LOGGER.info('Closing connection')
+            logger.info('Closing connection')
             self._connection.close()
 
 

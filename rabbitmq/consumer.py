@@ -1,12 +1,12 @@
 from pika import adapters
 import pika
+import datetime
 from rabbitmq import pika_send
-from logger_file import Logger
+from logger_file import get_logger
 
-logger = Logger().get_logger()
+logger = get_logger('server3')
 consumer_connection = None
-content= []
-
+content = []
 
 def connect_rabbitmq(consumer_connection=None):
     username = 'hourong'   #指定远程rabbitmq的用户名密码
@@ -23,14 +23,17 @@ def insert_spider_result(result):
     :return:
     '''
     try:
+        today = datetime.datetime.today().strftime('%Y%m%d')
         for task_info in result:
+            if task_info['source'] == 'hotelsListHotel':
+                logger.info('hotelsListHotel')
             # task_info.pop('_id')
-            pika_send.client['case_result']['spider_result2'].insert(task_info)
+            task_info['update_time'] = datetime.datetime.now()
+            pika_send.client['case_result'][today].insert(task_info)
             # logger.info('tid:%s'%(task_info['tid']))
         logger.info('完成此次爬虫入库')
     except Exception as e:
-        logger.info(e)
-        logger.info('mongo抛出异常！')
+        logger.error("mongo发生异常", exc_info=1)
 
 def feed_back_date_task(result):
     '''
@@ -41,19 +44,25 @@ def feed_back_date_task(result):
     try:
         for task_info in result:
             used_times = task_info['used_times'] + 1
+            feedback_times = task_info['feedback_times'] + 1
             if task_info['error'] == 0:
-                pika_send.date_task_db[task_info['collection_name']].update({'tid': task_info['tid']}, {'$set': {'finished': 1, 'run': 0, 'used_times': used_times}})
+                pika_send.date_task_db[task_info['collection_name']].update({'tid': task_info['tid']}, {'$set': {'finished': 1, 'run': 0, 'used_times': used_times, 'feedback_times': feedback_times}})
             else:
-                pika_send.date_task_db[task_info['collection_name']].update({'tid': task_info['tid']}, {'$set': {'run': 0, 'used_times': used_times}})
+                pika_send.date_task_db[task_info['collection_name']].update({'tid': task_info['tid']}, {'$set': {'run': 0, 'used_times': used_times, 'feedback_times': feedback_times}})
+            # if task_info['error'] == 0:
+            #     pika_send.date_task_db[task_info['collection_name']].update({'tid': task_info['tid']}, {'$set': {'finished': 1, 'run': 0, 'used_times': used_times}})
+            # else:
+            #     pika_send.date_task_db[task_info['collection_name']].update({'tid': task_info['tid']}, {'$set': {'run': 0, 'used_times': used_times}})
 
         logger.info('完成此次状态反馈')
     except Exception as e:
-        logger.info(e)
-        logger.info('mongo抛出异常！')
+        logger.error("mongo发生异常", exc_info=1)
 
 
 def slave_take_times(response):
     for line in response:
+        if isinstance(line, str):
+            line = eval(line)
         take_times = line['take_times'] + 1
         pika_send.date_task_db[line['collection_name']].update({'tid': line['tid']}, {'$set': {'take_times': take_times}})
     logger.info('完成取走次数更新')
@@ -397,7 +406,6 @@ class ExampleConsumer(object):
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
     example = ExampleConsumer('amqp://hourong:1220@10.10.189.213:5672/TaskDistribute')
     try:
         example.run()

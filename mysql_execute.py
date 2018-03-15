@@ -72,6 +72,22 @@ def update_monitor(conn_pool, sql_list, update_time):
             conn.close()
 
 
+def update_code(conn_pool, sql_list):
+    try:
+        conn = conn_pool.connection()
+        cursor = conn.cursor()
+        for sql in sql_list:
+            cursor.execute(sql)
+        conn.commit()
+        cursor.close()
+    except Exception as e:
+        logger.exception(msg="[sql error]", exc_info=1)
+        logger.info(sql_list)
+    finally:
+        if conn:
+            conn.close()
+
+
 if __name__ == '__main__':
     from conn_pool import source_info_pool
 
