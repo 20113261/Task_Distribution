@@ -7,6 +7,7 @@
 # @Software: PyCharm
 import copy
 import datetime
+import json
 from toolbox.Hash import get_token
 from model.TaskType import TaskType
 
@@ -28,12 +29,24 @@ class DateTask(object):
         if task_type == TaskType.RoundFlight:
             self.task_args['continent_id'] = kwargs['continent_id']
 
-        if task_type == TaskType.Hotel:
+        elif task_type in [TaskType.Hotel, TaskType.TempHotel]:
             self.task_args['suggest'] = kwargs['suggest']
             self.task_args['suggest_type'] = kwargs['suggest_type']
             self.task_args['country_id'] = kwargs['country_id']
             self.task_args['city_id'] = kwargs['city_id']
 
+        elif task_type in [TaskType.Train]:
+            self.task_args['ticket_info'] = {
+                "v_count": 1,
+                "auth": json.dumps({
+                    "key": "8780929146871554943",
+                    "url": "https://webservicesx.euronet.vsct.fr/V10/webservices/xml"
+                })}
+        elif task_type in [TaskType.Ferries]:
+            self.task_args['ticket_info'] = {
+                "psg": json.dumps({"num": 4, "age": [18, 18, 18, 18]}),
+                "car": json.dumps({"vLId": "", "vHId": "", "vTId": ""})
+            }
         # 任务是否已完成
         self.finished = 0
         # 任务使用的次数
@@ -53,12 +66,12 @@ class DateTask(object):
         self.feedback_times = 0
 
     def generate_tid(self):
-        if self.task_type in (TaskType.Flight, TaskType.RoundFlight, TaskType.MultiFlight, TaskType.Hotel):
-            # 飞机列表页任务，每个源只发一个任务
-            tmp_args = copy.deepcopy(self.task_args)
-            # if 'source' in tmp_args:
-            #     tmp_args.pop('source')#无解
-            return get_token(tmp_args)
+        # if self.task_type in (TaskType.Flight, TaskType.RoundFlight, TaskType.MultiFlight, TaskType.Hotel, TaskType.TempFlight, TaskType.TempHotel, TaskType.Train):
+        # 飞机列表页任务，每个源只发一个任务
+        tmp_args = copy.deepcopy(self.task_args)
+        # if 'source' in tmp_args:
+        #     tmp_args.pop('source')#无解
+        return get_token(tmp_args)
 
     @staticmethod
     def ignore_key():

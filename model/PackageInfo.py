@@ -54,17 +54,17 @@ class PackageInfo(object):
             package_id = int(line['id'])
             task_type = TaskType.parse_str(line['taskType'])
             update_cycle = line['update_cycle']
-            if package_id >= 0:
-                package = PackageId(
-                    package_id=package_id,
-                    task_type=task_type,
-                    update_cycle=update_cycle,
-                    start_date=line['daydiff_start'],
-                    end_date=line['daydiff_end'],
-                    slice_num=line['slice'],
-                    next_slice=line.get('next_slice')
-                )
-                __dict[task_type].append(package)
+            # if package_id >= 0:
+            package = PackageId(
+                package_id=package_id,
+                task_type=task_type,
+                update_cycle=update_cycle,
+                start_date=line['daydiff_start'],
+                end_date=line['daydiff_end'],
+                slice_num=line['slice'],
+                next_slice=line.get('next_slice')
+            )
+            __dict[task_type].append(package)
         # sort dict
         for k in __dict.keys():
             __dict[k] = sorted(__dict[k])

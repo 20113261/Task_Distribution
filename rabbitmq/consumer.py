@@ -3,8 +3,11 @@ import pika
 import datetime
 from rabbitmq import pika_send
 from logger_file import get_logger
+from mysql_execute import update_monitor, fetchall
+from conn_pool import task_db_monitor_db_pool
+from model.TaskType import TaskType
 
-logger = get_logger('server3')
+logger = get_logger('server')
 consumer_connection = None
 content = []
 
@@ -25,13 +28,19 @@ def insert_spider_result(result):
     try:
         today = datetime.datetime.today().strftime('%Y%m%d')
         for task_info in result:
-            if task_info['source'] == 'hotelsListHotel':
-                logger.info('hotelsListHotel')
-            # task_info.pop('_id')
+            # if 'Hotel' in task_info['source']:
+            #     info = '酒店错误码:'+ str(task_info['error'])+ task_info['collection_name']+ task_info['tid']
+            #     logger.info(info)
+
             task_info['update_time'] = datetime.datetime.now()
             pika_send.client['case_result'][today].insert(task_info)
             # logger.info('tid:%s'%(task_info['tid']))
-        logger.info('完成此次爬虫入库')
+        if 'Hotel' in result[0]['source']:
+            logger.info('完成此次酒店爬虫入库')
+        elif 'Flight' in result[0]['source']:
+            logger.info('完成此次飞机爬虫入库')
+        else:
+            logger.info('完成爬虫入库')
     except Exception as e:
         logger.error("mongo发生异常", exc_info=1)
 
@@ -66,6 +75,23 @@ def slave_take_times(response):
         take_times = line['take_times'] + 1
         pika_send.date_task_db[line['collection_name']].update({'tid': line['tid']}, {'$set': {'take_times': take_times}})
     logger.info('完成取走次数更新')
+
+
+def task_temporary_monitor(task_type, number):
+    update_time = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
+    task_type = str(task_type).split('.')[-1]
+    sql = '''insert into task_temporary_monitor(type,number,datetime) values('{}',{},'{}');'''.format(task_type, number, update_time)
+
+    update_monitor(task_db_monitor_db_pool, sql_list=[sql])
+
+
+def query_temporary_task():
+    sql = '''select type,number from task_temporary_monitor'''
+    query_list = []
+    for row in fetchall(task_db_monitor_db_pool, sql):
+        query_list.append((row[0], row[1]))
+    return query_list
+
 
 class ExampleConsumer(object):
     """This is an example consumer that will handle unexpected interactions

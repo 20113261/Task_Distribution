@@ -21,8 +21,11 @@ from model.PackageInfo import PackageInfo
 from toolbox.Date import date_takes
 from model.DateTask import DateTask
 from logger_file import get_logger
+from common.TempTask import TempTask
+
 
 logger = get_logger('InsertDateTask')
+logger_2 = get_logger('Insert_process')
 
 toolbox.Date.DATE_FORMAT = '%Y%m%d'
 
@@ -31,7 +34,7 @@ INSERT_WHEN = 2000
 
 def is_hotel_type(func):
     def wrapper(self, *args):
-        if self.task_type == TaskType.Hotel:
+        if self.task_type in [TaskType.Hotel, TaskType.TempHotel]:
             for source in task_source.hotel_source:
                 func(self, source, *args)
         else:
@@ -44,8 +47,10 @@ class DateTaskList(list):
 
 
 class InsertDateTask(object):
-    def __init__(self, task_type: TaskType):
+    def __init__(self, task_type: TaskType, number=None, routine=True, is_test=False):
         self.task_type = task_type
+
+        self.number = number if number is not None else ''
 
         # logger 记录日志
         self.logger = get_logger("InsertBaseTask")
@@ -56,8 +61,11 @@ class InsertDateTask(object):
 
         self.base_collections = self.base_task_db[self.generate_base_collections()]
 
-        #删除切片周期为1的mongo文档
-        if self.task_type == TaskType.Hotel:
+        # 初始化 PackageInfo 类
+        self.package_info = PackageInfo()
+
+        #删除切片周期为1的mongo文档。
+        if routine and is_test is False:
             self.delete_single_slice()
 
         # 按源生成多个 collections, 多个 tasks 队列
@@ -72,32 +80,53 @@ class InsertDateTask(object):
             # 初始化任务队列
             self.tasks_dict[each_source] = DateTaskList()
 
-        # 初始化 PackageInfo 类
-        self.package_info = PackageInfo()
-
         # 数据游标偏移量，用于在查询时发生异常恢复游标位置
         self.offset = 0
         # 数据游标前置偏移量，用于在入库时恢复游标位置
         self.pre_offset = 0
 
     def delete_single_slice(self):
-        for collection_name in self.date_task_db.collection_names():
-            self.date_task_db[collection_name].remove({'package_id': 5})
+        if self.task_type == TaskType.Hotel:
+            for collection_name in self.date_task_db.collection_names():
+                self.date_task_db[collection_name].remove({'package_id': 5})
+        elif self.task_type == TaskType.Flight:
+            for collection_name in self.date_task_db.collection_names():
+                self.date_task_db[collection_name].remove({'package_id': 0})
+        elif self.task_type == TaskType.RoundFlight:
+            for collection_name in self.date_task_db.collection_names():
+                self.date_task_db[collection_name].remove({'package_id': 12})
+        #TempFlight的InsertDateTask任务不删除周期为1的数据，留在每天delete_task_supervise.py里删除。
+        # elif self.task_type == TaskType.TempFlight:
+        #     TempTask.delete_single_slice(self.package_info, self.date_task_db, self.task_type)
+
 
     def generate_base_collections(self):
-        return "BaseTask_{}".format(str(self.task_type).split('.')[-1])
+        return "BaseTask_{}{}".format(str(self.task_type).split('.')[-1], self.number)
 
     @staticmethod
     def today():
-        # return '20180328'
+        # return '20180401'
         return datetime.datetime.today().strftime('%Y%m%d')
 
     def generate_date_collections(self, source):
-        return "DateTask_{}_{}_{}".format(
-            str(self.task_type).split('.')[-1],
-            source,
-            self.today()
-        )
+        if self.task_type in [TaskType.TempFlight]:
+            return "TemplateTask&{}_Flight_{}_{}".format(
+                self.number,
+                source,
+                self.today()
+            )
+        elif self.task_type == TaskType.TempHotel:
+            return "TemplateTask&{}_Hotel_{}_{}".format(
+                self.number,
+                source,
+                self.today()
+            )
+        else:
+            return "DateTask_{}_{}_{}".format(
+                str(self.task_type).split('.')[-1],
+                source,
+                self.today()
+            )
 
     def create_indexes(self, source):
         collections = self.date_task_db[self.date_collections_dict[source]]
@@ -130,27 +159,13 @@ class InsertDateTask(object):
         return start_n, part_num
 
     def get_total_source(self):
-        if self.task_type == TaskType.Flight:
-            total_source = task_source.flight_source
-        elif self.task_type == TaskType.RoundFlight:
-            total_source = task_source.round_flight_source
-        elif self.task_type == TaskType.MultiFlight:
-            total_source = task_source.multi_flight_source
-        elif self.task_type == TaskType.Hotel:
-            total_source = task_source.hotel_source
+        total_source = TaskType.get_source_list(str(self.task_type).split('.')[-1])
         # todo add other source
         return total_source
 
     def generate_source(self):
-        if self.task_type == TaskType.Flight:
-            source = random.choice(task_source.flight_source)
-        elif self.task_type == TaskType.RoundFlight:
-            source = random.choice(task_source.round_flight_source)
-        elif self.task_type == TaskType.MultiFlight:
-            source = random.choice(task_source.multi_flight_source)
-        elif self.task_type == TaskType.Hotel:
-            source = random.choice(task_source.hotel_source)
-        # todo add other source
+        source_list = TaskType.get_source_list(str(self.task_type).split('.')[-1])
+        source = random.choice(source_list)
         return source
 
     def generate_date_task(self, source, package_id, each_data, date, slice_num, collection_name):
@@ -162,7 +177,7 @@ class InsertDateTask(object):
         :return:
         """
         # type: package_id, dict, str -> DateTask
-        if self.task_type == TaskType.Flight:
+        if self.task_type in [TaskType.Flight, TaskType.TempFlight]:
             # 飞机需要拼接 date
             content = each_data['task_args']['content']
             content = "{}{}".format(content, date)
@@ -228,7 +243,33 @@ class InsertDateTask(object):
                 )
                 yield date_task
 
-        elif self.task_type == TaskType.Hotel:
+        elif self.task_type == TaskType.MultiFlight:
+            content = each_data['task_args']['content']
+            continent_id = each_data['task_args']['continent_id']
+            if int(continent_id) == 50:
+                end_board = 12
+            elif int(continent_id) == 20:
+                end_board = 9
+            elif int(continent_id) == 10:
+                end_board = 4
+            elif int(continent_id) == 30:
+                end_board = 9
+            date = datetime.datetime.strptime(date, '%Y%m%d')
+            multi_date = date + datetime.timedelta(days=end_board)
+            multi_date = multi_date.strftime('%Y%m%d')
+            date_task = DateTask(
+                source=source,
+                package_id=package_id,
+                task_type=self.task_type,
+                date=datetime.datetime.strftime(date, '%Y%m%d') + '&' + multi_date,
+                content=content,
+                continent_id=continent_id,
+                slice_num=slice_num,
+                collection_name=collection_name
+            )
+            yield date_task
+
+        elif self.task_type in [TaskType.Hotel, TaskType.TempHotel]:
             city_id = each_data['task_args']['city_id']
             suggest_type = each_data['task_args']['suggest_type']
             suggest = each_data['task_args']['suggest']
@@ -244,6 +285,36 @@ class InsertDateTask(object):
                 suggest=suggest,
                 suggest_type=suggest_type,
                 country_id=country_id,
+                slice_num=slice_num,
+                collection_name=collection_name
+            )
+            yield date_task
+
+        elif self.task_type in [TaskType.Train]:
+            content = each_data['task_args']['content']
+            content = "{}&{}".format(content, date)
+
+            date_task = DateTask(
+                source=source,
+                package_id=package_id,
+                task_type=self.task_type,
+                date=date,
+                content=content,
+                slice_num=slice_num,
+                collection_name=collection_name
+            )
+            yield date_task
+
+        elif self.task_type in [TaskType.Ferries]:
+            content = each_data['task_args']['content']
+            content = "{}&{}".format(content, date)
+
+            date_task = DateTask(
+                source=source,
+                package_id=package_id,
+                task_type=self.task_type,
+                date=date,
+                content=content,
                 slice_num=slice_num,
                 collection_name=collection_name
             )
@@ -306,7 +377,7 @@ class InsertDateTask(object):
     @is_hotel_type
     def insert_data(self, source, each_package_obj):
         # 基础任务请求
-        if self.task_type == TaskType.Hotel:
+        if self.task_type in [TaskType.Hotel, TaskType.TempHotel]:
             task_query = {
                 'task_args.source': source,
                 'task_type': self.task_type,
@@ -340,7 +411,7 @@ class InsertDateTask(object):
 
         self.m = 0
 
-        if self.task_type == TaskType.Hotel:
+        if self.task_type in [TaskType.Hotel, TaskType.TempHotel]:
             query = {
                     'task_args.source': source,
                     'task_type': self.task_type,
@@ -357,12 +428,13 @@ class InsertDateTask(object):
                 self.m += 1
                 # if line['task_args']['continent_id'] in ['10']:
                 #     self.continent += 1
-                if self.task_type == TaskType.Hotel:
+                if self.task_type in [TaskType.Hotel, TaskType.TempHotel]:
                     source = line['task_args']['source']
-                    collection_name = self.date_collections_dict[source]
+                elif self.task_type in [TaskType.Train]:
+                    source = 'raileuropeApiRail'
                 else:
                     source = self.generate_source()
-                    collection_name = self.date_collections_dict[source]
+                collection_name = self.date_collections_dict[source]
 
                 count = self.count_source[each_package_obj.package_id].get(source, 0)
                 self.count_source[each_package_obj.package_id][source] = count + 1
@@ -383,7 +455,8 @@ class InsertDateTask(object):
                     # 插入新的日期任务
                     for i in date_task:
                         self.n += 1
-                        logger.info(self.n)
+                        logger_str = str(self.task_type) + str(self.n)
+                        logger.info(logger_str)
                         self._insert_task(i)
         except Exception as e:
             logger.error("发生异常", exc_info=1)
@@ -408,7 +481,7 @@ class InsertDateTask(object):
         package_id_list = self.package_info.get_package()[self.task_type]
         #package_id_list是package_info集合中符合task_type的记录列表
         for each_package_obj in package_id_list:
-            if each_package_obj.package_id in [100, 5, 6]:
+            if each_package_obj.package_id in [100]:
                 continue
             if each_package_obj.next_slice == 0:
                 continue
@@ -418,6 +491,23 @@ class InsertDateTask(object):
 
 
 if __name__ == '__main__':
-
+    logger_2.info('酒店：')
     insert_date_task = InsertDateTask(task_type=TaskType.Hotel)
     insert_date_task.insert_task()
+    logger_2.info('联程飞机：')
+    insert_date_task = InsertDateTask(task_type=TaskType.MultiFlight)
+    insert_date_task.insert_task()
+    logger_2.info('单程飞机：')
+    insert_date_task = InsertDateTask(task_type=TaskType.Flight)
+    insert_date_task.insert_task()
+
+    logger_2.info('往返飞机：')
+    insert_date_task = InsertDateTask(task_type=TaskType.RoundFlight)
+    insert_date_task.insert_task()
+    logger_2.info('火车：')
+    insert_date_task = InsertDateTask(task_type=TaskType.Train)
+    insert_date_task.insert_task()
+    logger_2.info('临时任务：')
+    TempTask.insert_task()
+
+

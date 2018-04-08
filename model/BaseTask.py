@@ -20,10 +20,10 @@ class BaseTask(object):
             'content': kwargs.get('content', ''),
             'ticket_info': kwargs.get('ticket_info', {})
         }
-        if task_type == TaskType.RoundFlight:
+        if task_type in [TaskType.RoundFlight, TaskType.MultiFlight]:
             self.task_args['continent_id'] = kwargs['continent_id']
 
-        if task_type == TaskType.Hotel:
+        if task_type in [TaskType.Hotel, TaskType.TempHotel]:
             self.task_args['source'] = kwargs['source']
             self.task_args['city_id'] = kwargs['city_id']
             self.task_args['suggest'] = kwargs['suggest']

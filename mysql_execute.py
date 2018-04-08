@@ -10,13 +10,19 @@ from logger_file import get_logger
 logger = get_logger("mysql_executor")
 
 def fetchall(conn_pool, sql):
-    conn = conn_pool.connection()
-    cursor = conn.cursor()
-    cursor.execute(sql)
-    for line in cursor.fetchall():
-        yield line
-    cursor.close()
-    conn.close()
+    try:
+        conn = conn_pool.connection()
+        cursor = conn.cursor()
+        cursor.execute(sql)
+        for line in cursor.fetchall():
+            yield line
+        cursor.close()
+    except Exception as e:
+        logger.exception(msg="[sql error]", exc_info=e)
+        logger.info(sql)
+    finally:
+        if conn:
+            conn.close()
 
 
 def fetchall_ss(conn_pool, sql, size=10000):
@@ -51,7 +57,7 @@ def fetchall_ss(conn_pool, sql, size=10000):
             conn.close()
 
 
-def update_monitor(conn_pool, sql_list, update_time):
+def update_monitor(conn_pool, sql_list):
     try:
         # delete_sql = '''
         #     delete from task_day_list_monitor where datetime='%s';
@@ -86,6 +92,15 @@ def update_code(conn_pool, sql_list):
     finally:
         if conn:
             conn.close()
+
+
+
+
+
+
+
+
+
 
 
 if __name__ == '__main__':

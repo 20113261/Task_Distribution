@@ -16,12 +16,6 @@ from model.TaskType import TaskType
 
 logger = get_logger('producter')
 
-task_level =\
-    {'Flight': [0,1,2,3,4],
-    'RoundFlight': [12, 13, 14],
-    'multiflight_task_level': [0],
-     'Hotel':[5,6,7,8,100]}
-
 
 # total_task_level_dict = {}
 # collection_task_level = {}
@@ -49,7 +43,8 @@ def yesterday_advance(task_type):
     global date_list
     global collection_advance_dict
     for collection_name in pika_send.date_task_db.collection_names():
-        if task_type not in collection_name:
+        type = collection_name.split('_')[1]
+        if task_type != type:
             continue
         collection_date = collection_name.split('_')[-1]
         collection_advance_dict[collection_name] = collection_date
@@ -75,7 +70,7 @@ def first_calculate_step(task_type):
 
     total_count = 0
     try:
-        for package_id in task_level.get(task_type, ''):
+        for package_id in TaskType.get_package_list(task_type):
             for date in date_list:
                 level = {}
                 per_level_count = 0
@@ -86,7 +81,7 @@ def first_calculate_step(task_type):
                     collection_date = collection_name.split('_')[-1]
                     if collection_date != date:
                         continue
-                    if task_type not in collection_name:
+                    if task_type != type:
                         continue
                     data_count = pika_send.date_task_db[collection_name].find({'package_id':package_id, 'run':0, 'used_times': {'$lt': used_times_config}, 'finished': 0}).count() #此条件注意
                     level[collection_name] = data_count
@@ -130,14 +125,14 @@ def first_calculate_step(task_type):
 #     return total_count, per_level_dict, level_dict
 
 
-def second_calculate_step(total_count):
+def second_calculate_step(total_count, task_type):
     '''
     :param total_count:
     :return: per_share_count为计算出的每五分钟的入队数量
     '''
     now_time = datetime.datetime.now()
     # next_day_str = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime('%Y-%m-%d') + ' 00:00:00'
-    next_day_str = (datetime.datetime.now()).strftime('%Y-%m-%d') + ' 20:00:00'
+    next_day_str = (datetime.datetime.now()).strftime('%Y-%m-%d') + ' 21:00:00'
     next_day = datetime.datetime.strptime(next_day_str,"%Y-%m-%d %H:%M:%S")
     # print(next_day)
 
@@ -148,8 +143,12 @@ def second_calculate_step(total_count):
     print('---------second_calculate_step---------')
     print(time_shares, shares, per_share_count)
 
-    if per_share_count < 5000: #包括per_share_count <= 0
+    if task_type!='Train' and per_share_count < 3000: #包括per_share_count <= 0
+        return 3000
+    elif task_type in ['RoundFlight', 'MultiFlight'] and per_share_count < 5000:
         return 5000
+    elif task_type=='Train' and per_share_count < 40:
+        return 40
     return per_share_count
 
 def third_calculate_step(per_share_count, per_level):
@@ -230,8 +229,12 @@ def fourth_calculate_step(distribute_result, per_level_dict, level_dict):
                         level_count = from_list_get_count(date, per_level_count)
                         count = math.ceil(number * value[date] / level_count) #注意value错误
                         #如果数量超过一定值，则规定最大值
-                        if count > 10000:
-                            count = 10000
+                        if 'Hotel' in collection_name:
+                            if count > 10000:
+                                count = 10000
+                        else:
+                            if count > 20000:
+                                count = 20000
                         final_level_count[collection_name].append((key, count))
                         # print(collection_name, count, number, value[date], level_count)
                 except Exception as e:
@@ -269,7 +272,7 @@ def final_distribute(task_type):
     init_variable()
     yesterday_advance(task_type)
     total_count, per_level_dict, level_dict = first_calculate_step(task_type)
-    per_share_count = second_calculate_step(total_count)
+    per_share_count = second_calculate_step(total_count, task_type)
     per_level = sorted(per_level_dict.items(), key=lambda d: d[0])
     distribute_result = third_calculate_step(per_share_count, per_level)  # per_share_count, per_level_dict
     logger.info('distribute_result:{}'.format(distribute_result))
@@ -297,6 +300,6 @@ def from_list_get_count(date, data_list:list):
 if __name__ == '__main__':
 
     # final_distribute = final_distribute('Hotel')
-    final_distribute = final_distribute(TaskType.Hotel)
+    final_distribute = final_distribute(TaskType.Train)
 
     print(final_distribute)

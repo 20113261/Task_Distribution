@@ -42,10 +42,14 @@ hotel_source = [
 ]
 
 train_source = [
-    'ctripRail'
+    'raileuropeApiRail'
 ]
 bus_source = [
     'megabusUSBus'
+]
+
+ferries_source = [
+    'directListFerry'
 ]
 
 # error_code_list = {_0_: 0,
