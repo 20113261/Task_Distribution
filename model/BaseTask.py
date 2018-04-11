@@ -32,7 +32,7 @@ class BaseTask(object):
 
         # 生成任务 id
         self.tid = self.generate_tid()
-        print(self.tid)
+        # print(self.tid)
 
     def generate_tid(self):
         return get_token(self.task_args)

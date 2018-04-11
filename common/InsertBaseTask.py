@@ -7,6 +7,7 @@
 # @Software: PyCharm
 import pymongo
 import mock
+import traceback
 import common.patched_mongo_insert
 from conf import config
 from model.TaskType import TaskType
@@ -15,6 +16,7 @@ from model.BaseTask import BaseTask
 from common.generate_task_info import generate_hotel_base_task_info, generate_flight_base_task_info, \
     generate_round_flight_base_task_info, generate_multi_flight_base_task_info, get_mutli_dept_airport,\
     generate_temporary_flight_task, generate_rail_base_task_info,generate_ferries_base_task_info
+
 
 INSERT_WHEN = 2000
 
@@ -94,29 +96,39 @@ class InsertBaseTask(object):
         return len(self.tasks) >= INSERT_WHEN
 
     def _insert_task(self, args: dict):
+
         if isinstance(args, dict):
             __t = BaseTask(**args)
             self.tasks.append_task(__t)
             self.pre_offset += 1
-
             # 如果当前可以入库，则执行入库
             if self.insert_stat():
+                self.logger.info('insert into mongo:')
                 self.insert_mongo()
+
         else:
+            self.logger('错误的 args 类型 < {0} >'.format(type(args).__name__))
             raise TypeError('错误的 args 类型 < {0} >'.format(type(args).__name__))
 
+
     def insert_task(self):
+        self.logger.info('insert_task:')
+        i = 0
         if self.task_type == TaskType.Flight:
-            for dept, dest, package_id in generate_flight_base_task_info():
-                content = "{}&{}&".format(dept, dest)
-                self._insert_task(
-                    {
-                        'content': content,
-                        'package_id': package_id,
-                        # 'source': source,
-                        'task_type': self.task_type
-                    }
-                )
+                for dept, dest, package_id in generate_flight_base_task_info():
+                    content = "{}&{}&".format(dept, dest)
+                    i += 1
+                    self.logger.info(i)
+
+                    self._insert_task(
+                        {
+                            'content': content,
+                            'package_id': package_id,
+                            # 'source': source,
+                            'task_type': self.task_type
+                        }
+                    )
+
         elif self.task_type == TaskType.RoundFlight:
             for dept, dest, package_id, continent_id in generate_round_flight_base_task_info():
                 content = "{}&{}&".format(dept, dest)

@@ -5,6 +5,7 @@
 # @Site    : 
 # @File    : generate_task_info.py
 # @Software: PyCharm
+import traceback
 from conn_pool import base_data_pool, source_info_pool, task_db_monitor_db_pool
 from mysql_execute import fetchall, fetchall_ss
 from logger_file import get_logger
@@ -228,6 +229,8 @@ WHERE (city.id = airport.belong_city_id) AND airport.status = 'Open' AND city.co
         ("3-6", rank3, rank6, 4, True),
     ]
 
+    logger.info(str(len(rank1)) + ',' + str(len(rank2)) + ',' + str(len(rank3)) + ',' + str(len(rank4)) + ',' + str(len(rank5)) + ',' + str(len(rank6)))
+
     for report_key, first_rank, last_rank, package_id, need_continent_filter in target_data:
         for v1 in first_rank.values():
             for v2 in last_rank.values():
@@ -264,8 +267,9 @@ WHERE (city.id = airport.belong_city_id) AND airport.status = 'Open' AND city.co
                         ]
                     )
 
-        logger.info("[package_id: {}][rank {} finished]".format(package_id, report_key))
 
+        logger.info("[package_id: {}][rank {} finished]".format(package_id, report_key))
+    logger.info('data:' + str(len(data)))
     yield from data
 
 
@@ -330,8 +334,10 @@ def generate_round_flight_base_task_info():
     judge_data = set()
 
     for report_key, first_rank, last_rank, package_id in target_data:
+        logger.info(report_key)
         for v1 in first_rank.values():
             for v2 in last_rank.values():
+                logger.info(v2['iata_code'])
                 if v1['iata_code'] == v2['iata_code']:
                     # iata_code 相同时过滤
                     continue
@@ -348,6 +354,7 @@ def generate_round_flight_base_task_info():
                             v2["continent_id"]
                         ]
                     )
+
 
         logger.info("[package_id: {}][rank {} finished]".format(package_id, report_key))
 

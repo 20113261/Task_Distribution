@@ -9,6 +9,22 @@ import pymysql.cursors
 from logger_file import get_logger
 logger = get_logger("mysql_executor")
 
+def fetch_count(conn_pool, sql):
+    try:
+        conn = conn_pool.connection()
+        cursor = conn.cursor()
+        cursor.execute(sql)
+        result = cursor.fetchone()
+        cursor.close()
+        return result[0]
+    except Exception as e:
+        logger.exception(msg="[sql error]", exc_info=e)
+        logger.info(sql)
+    finally:
+        if conn:
+            conn.close()
+
+
 def fetchall(conn_pool, sql):
     try:
         conn = conn_pool.connection()

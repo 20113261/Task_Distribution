@@ -204,3 +204,28 @@ rail_base_task_query = {
 ferries_base_task_query = {
     'base_sql': 'select routeId from ferries_list;'
 }
+
+supervise_supplement_city_sql = {
+    'flight_package_id_2': '''SELECT
+  count(*) FROM country, airport, city
+WHERE (city.id = airport.belong_city_id) AND airport.status = 'Open' AND city.country_id = country.mid AND
+      city.trans_degree = 0 AND (city.status_online = 'Open' OR city.status_test = 'Open') AND city.country_id <> '101'
+      AND city.name <> '香港';''',
+
+    'flight_package_id_3': '''SELECT
+  count(*) FROM country, airport, city
+WHERE (city.id = airport.belong_city_id) AND airport.status = 'Open' AND city.country_id = country.mid AND
+      city.trans_degree = 1 AND (city.status_online = 'Open' OR city.status_test = 'Open') AND city.country_id <> '101'
+      AND city.name <> '香港';''',
+
+    'flight_package_id_4': '''SELECT
+  count(*)
+FROM country, airport, city
+WHERE (city.id = airport.belong_city_id) AND airport.status = 'Open' AND city.country_id = country.mid AND
+      city.trans_degree = -1 AND (city.status_online = 'Open' OR city.status_test = 'Open') AND city.country_id <> '101'
+      AND city.name <> '香港';''',
+    
+    'flight_count_monitor': '''select count from task_monitor_supplement_city where package_id={}''',
+    
+    'update_flight_count': '''replace into task_monitor_supplement_city (package_id, count, datetime, type) value({}, {}, {}, 'Flight')'''
+}
