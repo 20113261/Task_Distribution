@@ -455,16 +455,18 @@ def get_hotel_info(row):
     # country_id = row[6]
     # package_id = 100
 
-    if city_id is None:
-        package_id = 100
-    elif trans_degree == 0 or trans_degree == 1 or grade == 1 or grade == 2:
+
+    if trans_degree == 0 or trans_degree == 1 or grade == 1 or grade == 2:
         package_id = 5
     elif grade == 3 or grade == 4:
         package_id = 6
-    elif grade >= 5:
+    #city.grade=5 or city.grade=6
+    elif grade == 5 or grade == 6:
         package_id = 7
-    else:
+    elif grade == 7 or grade == 8 or grade == 9:
         package_id = 8
+    else:
+        package_id = 100
     return city_id, suggest, suggest_type, package_id, country_id, source
 
 # todo rail 的内容可能需要修改，当前依赖 ctrip_rail_table 发的任务的
@@ -519,9 +521,20 @@ def generate_rail_base_task_info():
 def generate_ferries_base_task_info():
     base_sql = ferries_base_task_query['base_sql']
     data = []
+    filter_sql = ferries_base_task_query['filter_sql']
+    filter_data = []
+    for row in fetchall(base_data_pool, filter_sql):
+        city_name = row[0]
+        filter_data.append(city_name)
+
     for row in fetchall(source_info_pool, base_sql):
         route_id = row[0]
-        data.append([route_id, 60])
+        port1 = row[1].split('（')[0]
+        port2 = row[2].split('（')[0]
+        if port1 in filter_data:
+            if port2 in filter_data:
+                data.append([route_id, 60])
+
     yield from data
 
 

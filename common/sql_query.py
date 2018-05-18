@@ -202,7 +202,8 @@ rail_base_task_query = {
 }
 
 ferries_base_task_query = {
-    'base_sql': 'select routeId from ferries_list;'
+    'base_sql': 'select routeId,port1,port2 from  ferries_list;',
+    'filter_sql': 'select terminal_name, city_id from sail_station;'
 }
 
 supervise_supplement_city_sql = {

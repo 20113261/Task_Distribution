@@ -64,6 +64,9 @@ if __name__ == '__main__':
         query_mongo('Train')
         delete_datetask_documents('Train')
         drop_collection()
+        query_mongo('Ferries')
+        delete_datetask_documents('Ferries')
+        drop_collection()
     except Exception as e:
         logger.error('异常', exc_info=1)
     logger.info('完成删除！')

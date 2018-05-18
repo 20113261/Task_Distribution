@@ -5,7 +5,10 @@
 # @Site    : 
 # @File    : InsertDateTask.py
 # @Software: PyCharm
+'''此版本酒店为最新版需求'''
+
 import math
+import copy
 import mock
 import random
 import pymongo
@@ -22,7 +25,8 @@ from toolbox.Date import date_takes
 from model.DateTask import DateTask
 from logger_file import get_logger
 from common.TempTask import TempTask
-
+from common.generate_task_utils import sort_date_task_cursor, decide_need_hotel_task, today_date
+from conf.config import multiply_times, frequency
 
 logger = get_logger('InsertDateTask')
 logger_2 = get_logger('Insert_process')
@@ -31,15 +35,6 @@ toolbox.Date.DATE_FORMAT = '%Y%m%d'
 
 INSERT_WHEN = 2000
 
-
-def is_hotel_type(func):
-    def wrapper(self, *args):
-        if self.task_type in [TaskType.Hotel, TaskType.TempHotel]:
-            for source in task_source.hotel_source:
-                func(self, source, *args)
-        else:
-            func(self, '', *args)
-    return wrapper
 
 class DateTaskList(list):
     def append_task(self, task: DateTask):
@@ -58,6 +53,9 @@ class InsertDateTask(object):
         client = pymongo.MongoClient(host=config.mongo_host)
         self.base_task_db = client[config.mongo_base_task_db]
         self.date_task_db = client[config.mongo_date_task_db]
+        self.is_test = is_test
+        if self.is_test:
+            self.date_task_db = client['Test_RoutineDateTask']
 
         self.base_collections = self.base_task_db[self.generate_base_collections()]
 
@@ -84,11 +82,17 @@ class InsertDateTask(object):
         self.offset = 0
         # 数据游标前置偏移量，用于在入库时恢复游标位置
         self.pre_offset = 0
+        # 用于遇到上一次无含早情况下，提示下一次再多取一次含早
+        self.take_one_more = 0
+        #
+        self.memory_count_by_source = {}
 
     def delete_single_slice(self):
         if self.task_type == TaskType.Hotel:
             for collection_name in self.date_task_db.collection_names():
-                self.date_task_db[collection_name].remove({'package_id': 5})
+                for package_id in range(5, 9):
+                    if frequency.get(str(package_id)) == 1:
+                        self.date_task_db[collection_name].remove({'package_id': package_id})
         elif self.task_type == TaskType.Flight:
             for collection_name in self.date_task_db.collection_names():
                 self.date_task_db[collection_name].remove({'package_id': 0})
@@ -103,29 +107,25 @@ class InsertDateTask(object):
     def generate_base_collections(self):
         return "BaseTask_{}{}".format(str(self.task_type).split('.')[-1], self.number)
 
-    @staticmethod
-    def today():
-        # return '20180401'
-        return datetime.datetime.today().strftime('%Y%m%d')
 
     def generate_date_collections(self, source):
         if self.task_type in [TaskType.TempFlight]:
             return "TemplateTask&{}_Flight_{}_{}".format(
                 self.number,
                 source,
-                self.today()
+                today_date(self.is_test)
             )
         elif self.task_type == TaskType.TempHotel:
             return "TemplateTask&{}_Hotel_{}_{}".format(
                 self.number,
                 source,
-                self.today()
+                today_date(self.is_test)
             )
         else:
             return "DateTask_{}_{}_{}".format(
                 str(self.task_type).split('.')[-1],
                 source,
-                self.today()
+                today_date(self.is_test)
             )
 
     def create_indexes(self, source):
@@ -288,7 +288,37 @@ class InsertDateTask(object):
                 slice_num=slice_num,
                 collection_name=collection_name
             )
-            yield date_task
+            date_task_list = []
+            date_task.task_args['ticket_info']['hotel_info']['bed_type'] = -1
+            need_breakfast_column = each_data['need_breakfast_column']
+            if need_breakfast_column == 0:
+                date_task.task_args['ticket_info']['hotel_info']['has_breakfast'] = -1
+                date_task.tid = date_task.generate_tid()
+                date_task_list.append(copy.deepcopy(date_task))
+            elif need_breakfast_column == 1:
+                date_task.task_args['ticket_info']['hotel_info']['has_breakfast'] = 1
+                date_task.tid = date_task.generate_tid()
+                date_task_list.append(copy.deepcopy(date_task))
+            else:
+                date_task.task_args['ticket_info']['hotel_info']['has_breakfast'] = -1
+                date_task.tid = date_task.generate_tid()
+                date_task_list.append(copy.deepcopy(date_task))
+                date_task.task_args['ticket_info']['hotel_info']['has_breakfast'] = 1
+                date_task.tid = date_task.generate_tid()
+                date_task_list.append(copy.deepcopy(date_task))
+
+            yield from date_task_list
+
+                # date_task.task_args['ticket_info']['bed_type'] = 1
+                # date_task.tid = date_task.generate_tid()
+                # date_task_list.append(copy.deepcopy(date_task))
+                # date_task.task_args['ticket_info']['bed_type'] = 2
+                # date_task.tid = date_task.generate_tid()
+                # date_task_list.append(copy.deepcopy(date_task))
+                # date_task.task_args['ticket_info']['bed_type'] = -1
+                # date_task.task_args['ticket_info']['has_breakfast'] = 1
+                # date_task.tid = date_task.generate_tid()
+                # date_task_list.append(copy.deepcopy(date_task))
 
         elif self.task_type in [TaskType.Train]:
             content = each_data['task_args']['content']
@@ -320,6 +350,32 @@ class InsertDateTask(object):
             )
             yield date_task
 
+    def generate_task(self, each_package_obj, date_list, source, line):
+        collection_name = self.date_collections_dict[source]
+
+        count = self.count_source[each_package_obj.package_id].get(source, 0)
+        self.count_source[each_package_obj.package_id][source] = count + 1
+
+        for date in date_list:
+            # 遍历当前应该有的所有日期
+
+            # 生成新的日期任务
+            date_task = self.generate_date_task(
+                source,
+                package_id=each_package_obj.package_id,
+                each_data=line,
+                date=date,
+                slice_num=each_package_obj.slice_num,
+                collection_name=collection_name
+            )
+
+            # 插入新的日期任务
+            for i in date_task:
+                self.n += 1
+                logger_str = str(self.task_type) + str(self.n)
+                # logger.info(logger_str)
+                self._insert_task(i)
+
     def mongo_patched_insert(self, data, source):
         try:
             collections = self.date_task_db[self.date_collections_dict[source]]
@@ -331,6 +387,86 @@ class InsertDateTask(object):
                 return result
         except Exception as e:
             logger.error("发生异常", exc_info=1)
+
+
+    # def query_hotel_base(self, city_id):
+    #     res = []
+    #     cursor = []
+    #     for line in self.base_collections.find({'task_args.city_id': city_id}):
+    #         cursor.append(line)
+    #     # random.shuffle(cursor)
+    #     cursor = sort_date_task_cursor(cursor)
+    #     query_count = len(cursor)
+    #     take_count = 2 if query_count >= 2 else 1
+    #     line_list = cursor[0:2]
+    #     try:
+    #         for line in line_list:
+    #             if line['task_args']['source'] in ['agodaListHotel', 'elongListHotel']:
+    #                 line['need_breakfast_column'] = 0
+    #                 res.append(line)
+    #                 if query_count > take_count:
+    #                     next_line = cursor[take_count]
+    #                     take_count += 1
+    #                     if next_line['task_args']['source'] in ['agodaListHotel', 'elongListHotel']:
+    #                         if query_count > take_count:
+    #                             next_line = cursor[take_count]
+    #                             next_line['need_breakfast_column'] = 1
+    #                             res.append(next_line)
+    #                             take_count += 1
+    #                     else:
+    #                         next_line['need_breakfast_column'] = 1
+    #                         res.append(next_line)
+    #             else:
+    #                 line['need_breakfast_column'] = 2
+    #                 res.append(line)
+    #     except Exception as e:
+    #         logger.info('{}{}'.format('+++++', cursor))
+    #         raise e
+    #     yield from res
+
+    def query_hotel_base(self, city_id):
+        res = []
+        cursor = []
+        for line in self.base_collections.find({'task_args.city_id': city_id}):
+            cursor.append(line)
+        cursor = sort_date_task_cursor(cursor)
+        query_count = len(cursor)
+        take_count = 2 if query_count >= 2 else 1
+
+        try:
+            for each_line in cursor[0:2]:
+                package_id = each_line['package_id']
+                source = each_line['task_args']['source']
+                self.memory_count_by_source[source] = self.memory_count_by_source.get(source, 0) + multiply_times[str(package_id)]
+                if self.memory_count_by_source[source] > 300000:
+                    if query_count > take_count:
+                        line, take_count = decide_need_hotel_task(cursor, take_count, self.memory_count_by_source)
+                else:
+                    line = each_line
+                source = line['task_args']['source']
+                if source in ['agodaListHotel', 'elongListHotel']:
+                    line['need_breakfast_column'] = 0
+                    res.append(line)
+                    if query_count > take_count:
+                        next_line, take_count = decide_need_hotel_task(cursor, take_count, self.memory_count_by_source)
+                        if next_line['task_args']['source'] in ['agodaListHotel', 'elongListHotel']:
+                            if query_count > take_count:
+                                next_line, take_count = decide_need_hotel_task(cursor, take_count, self.memory_count_by_source)
+                                next_line['need_breakfast_column'] = 1
+                                res.append(next_line)
+                        else:
+                            next_line['need_breakfast_column'] = 1
+                            res.append(next_line)
+                else:
+                    line['need_breakfast_column'] = 2
+                    res.append(line)
+
+        except Exception as e:
+            logger.info('{}{}'.format('+++++', cursor))
+            logger.exception(msg='出错', exc_info=e)
+            raise e
+        yield from res
+
 
     def __insert_mongo(self, source):
         if len(self.tasks_dict[source]) > 0:
@@ -374,24 +510,31 @@ class InsertDateTask(object):
         else:
             raise TypeError('错误的 args 类型 < {0} >'.format(type(date_task).__name__))
 
-    @is_hotel_type
-    def insert_data(self, source, each_package_obj):
+    # @is_hotel_type
+    def insert_data(self, each_package_obj):
         # 基础任务请求
-        if self.task_type in [TaskType.Hotel, TaskType.TempHotel]:
-            task_query = {
-                'task_args.source': source,
-                'task_type': self.task_type,
-                'package_id': each_package_obj.package_id
-            }
-        else:
-            task_query = {
-                'task_type': self.task_type,
-                'package_id': each_package_obj.package_id
-            }
-
-        # self.base_collections是BaseTask集合。 计算基础任务计数
         try:
-            _task_n = self.base_collections.count(task_query)
+            if self.task_type in [TaskType.Hotel, TaskType.TempHotel]:
+                _task_n = 0
+                cursor = self.base_collections.aggregate(
+                    [
+                        {'$match': {'package_id': each_package_obj.package_id}},
+                        {'$group': {'_id': "$task_args.city_id",
+                                    'task': {'$push': "$$ROOT"}}}]
+                )
+                for i in cursor:
+                    if len(i['task']) == 1:
+                        _task_n += 1
+                    else:
+                        _task_n += 2
+            else:
+                task_query = {
+                    'task_type': self.task_type,
+                    'package_id': each_package_obj.package_id
+                }
+
+                # self.base_collections是BaseTask集合。 计算基础任务计数
+                _task_n = self.base_collections.count(task_query)
         except Exception as e:
             logger.error("发生异常", exc_info=1)
 
@@ -409,55 +552,43 @@ class InsertDateTask(object):
         date_list = list(date_takes(each_package_obj.end_date - each_package_obj.start_date,
                                     ignore_days=each_package_obj.start_date))
 
-        self.m = 0
-
-        if self.task_type in [TaskType.Hotel, TaskType.TempHotel]:
-            query = {
-                    'task_args.source': source,
-                    'task_type': self.task_type,
-                    'package_id': each_package_obj.package_id
-                }
-        else:
-            query = {
-                    'task_type': self.task_type,
-                    'package_id': each_package_obj.package_id
-                }
-        # 在BaseTask集合中查找符合task_type的记录
         try:
-            for line in self.base_collections.find(query).sort([("_id", 1)]).skip(start_n).limit(part_num):
-                self.m += 1
-                # if line['task_args']['continent_id'] in ['10']:
-                #     self.continent += 1
-                if self.task_type in [TaskType.Hotel, TaskType.TempHotel]:
-                    source = line['task_args']['source']
-                elif self.task_type in [TaskType.Train]:
-                    source = 'raileuropeApiRail'
-                else:
-                    source = self.generate_source()
-                collection_name = self.date_collections_dict[source]
-
-                count = self.count_source[each_package_obj.package_id].get(source, 0)
-                self.count_source[each_package_obj.package_id][source] = count + 1
-
-                for date in date_list:
-                    # 遍历当前应该有的所有日期
-
-                    # 生成新的日期任务
-                    date_task = self.generate_date_task(
-                        source,
-                        package_id=each_package_obj.package_id,
-                        each_data=line,
-                        date=date,
-                        slice_num=each_package_obj.slice_num,
-                        collection_name=collection_name
-                    )
-
-                    # 插入新的日期任务
-                    for i in date_task:
-                        self.n += 1
-                        logger_str = str(self.task_type) + str(self.n)
-                        logger.info(logger_str)
-                        self._insert_task(i)
+            if self.task_type in [TaskType.Hotel, TaskType.TempHotel]:
+                start_index = 0
+                # for city_id in self.base_collections.distinct('task_args.city_id', {'package_id': each_package_obj.package_id}):
+                cursor = self.base_collections.aggregate(
+                    [
+                        {'$match': {'package_id': each_package_obj.package_id}},
+                        {'$group': {'_id': "$task_args.city_id",
+                                    'task': {'$push': "$$ROOT"}}}]
+                )
+                for i in cursor:
+                    if len(i['task']) == 1:
+                        start_index += 1
+                    else:
+                        start_index += 2
+                    if start_index <= start_n:
+                        continue
+                    if start_index > (start_n + part_num):
+                        break
+                    for line in self.query_hotel_base(i['task'][0]['task_args']['city_id']):
+                        source = line['task_args']['source']
+                        self.generate_task(each_package_obj, date_list, source, line)
+            else:
+                query = {
+                        'task_type': self.task_type,
+                        'package_id': each_package_obj.package_id
+                    }
+                # 在BaseTask集合中查找符合task_type的记录
+                for line in self.base_collections.find(query).sort([("_id", 1)]).skip(start_n).limit(part_num):
+                    # if line['task_args']['continent_id'] in ['10']:
+                    #     self.continent += 1
+                    #火车固定source,飞机随机性选source
+                    if self.task_type in [TaskType.Train]:
+                        source = 'raileuropeApiRail'
+                    else:
+                        source = self.generate_source()
+                    self.generate_task(each_package_obj, date_list, source, line)
         except Exception as e:
             logger.error("发生异常", exc_info=1)
 
@@ -488,9 +619,11 @@ class InsertDateTask(object):
             self.insert_data(each_package_obj)
 
             self.package_info.alter_slice_num(each_package_obj)
+        logger.info(self.memory_count_by_source)
 
 
 if __name__ == '__main__':
+    #如果不能删除现有的周期为1的数据，则此main函数不能执行。
     logger_2.info('酒店：')
     insert_date_task = InsertDateTask(task_type=TaskType.Hotel)
     insert_date_task.insert_task()
@@ -506,6 +639,9 @@ if __name__ == '__main__':
     insert_date_task.insert_task()
     logger_2.info('火车：')
     insert_date_task = InsertDateTask(task_type=TaskType.Train)
+    insert_date_task.insert_task()
+    logger_2.info('渡轮：')
+    insert_date_task = InsertDateTask(task_type=TaskType.Ferries)
     insert_date_task.insert_task()
     logger_2.info('临时任务：')
     TempTask.insert_task()

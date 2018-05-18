@@ -24,6 +24,10 @@ package_info_collection = 'package_info'
 per_retrieve_count = 200
 
 used_times_config = 2 #包括第一次
+used_times_by_source = {'Hotel':used_times_config, 'Flight':used_times_config,
+                        'RoundFlight': used_times_config, 'MultiFlight': used_times_config,
+                        'Train':used_times_config, 'Ferries': used_times_config}
+used_times_specified = 4
 
 package_list = {
                 'Flight': [-1, 0, 1, 2, 3, 4],
@@ -34,5 +38,8 @@ package_list = {
                 'Ferries': [60]
             }
 
-frequency = {'-1': 1, '0': 1, '1': 2, '2': 4, '3': 8, '4': 10, '12': 1, '13': 4, '14': 7, '15': 3, '5': 1, '6': 2, '7': 8, '8': 8, '10':50, '60':10}
+#更改mongo里的package_info时，同时更改此配置。
+frequency = {'-1': 1, '0': 1, '1': 2, '2': 4, '3': 8, '4': 10, '12': 1, '13': 4, '14': 7, '15': 3, '5': 1, '6': 1, '7': 1, '8': 1, '10':50, '60':3}
 
+#当更新需求设计的天数和翻页次数时，需要更新此变量
+multiply_times = {'5': 166, '6':166, '7': 53, '8': 26.5}

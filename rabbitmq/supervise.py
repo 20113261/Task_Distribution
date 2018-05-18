@@ -3,11 +3,13 @@ import datetime
 import init_path
 from conf.config import mongo_host, mongo_base_task_db, mongo_date_task_db, used_times_config
 from collections import defaultdict
-from mysql_execute import update_monitor, update_code
+from mysql_execute import update_monitor, update_code, fetchall
 from logger_file import get_logger
 from conf import task_source
 from conf.config import frequency
 from model.TaskType import TaskType
+from conn_pool import task_db_monitor_db_pool
+
 
 logger = get_logger('supervise')
 
@@ -17,12 +19,12 @@ base_task_db = client[mongo_base_task_db]
 
 
 
-
 slices_result = None
 package_count_list = {}
 package_statistic = {}
 update_time = datetime.datetime.now().strftime('%Y%m%d%H') + '00'
 update_day = datetime.datetime.now().strftime('%Y%m%d')
+today = datetime.datetime.today().strftime('%Y%m%d')
 
 def query_mongo(task_type):
     '''
@@ -53,8 +55,16 @@ def query_mongo(task_type):
                 feedback_count = date_task_db[collection_name].aggregate([{'$match': {'package_id': package_id, 'slice_num': slice_num}}, {'$group':{'_id': 'feedback_times', 'counter':{'$sum':'$feedback_times'}}}])
                 for i in feedback_count:
                     feedback_count = i['counter']
+                non_feedback_count = date_task_db[collection_name].aggregate([{'$match': {'finished': 0, 'package_id': package_id, 'slice_num': slice_num}},{'$group': {'_id': 'non_feedback_times', 'counter': {'$sum': '$non_feedback_times'}}}])
+                for i in non_feedback_count:
+                    non_feedback_count = i['counter']
+                #finished為零時，non_feedback_count不為整數。
+                if not isinstance(non_feedback_count, int):
+                    non_feedback_count = 0
                 success_count = date_task_db[collection_name].find({'package_id': package_id, 'slice_num': slice_num, 'finished': 1}).count()
+                # fail_count = record_count - success_count
                 fail_count = date_task_db[collection_name].find({'package_id': package_id, 'slice_num': slice_num, 'finished': 0, 'used_times': {'$gte': used_times_config}}).count()
+
                 task_progress = (success_count + fail_count) / record_count
 
                 used_count = date_task_db[collection_name].find({'package_id': package_id, 'slice_num': slice_num, 'used_times': {'$gte': 1}}).count()
@@ -64,13 +74,14 @@ def query_mongo(task_type):
                 total_take_times = date_task_db[collection_name].aggregate([{'$match': {'package_id': package_id, 'slice_num': slice_num}}, {'$group':{'_id':'null', 'total_take_times': {'$sum':'$take_times'}}}, {'$project':{'_id':0, 'total_take_times':1}}])
                 for take_times in total_take_times:
                     total_take_times = take_times['total_take_times']
+                code_29_total_count = date_task_db[collection_name].find({'error_code':29, 'package_id': package_id, 'slice_num': slice_num}).count()
                 if 'TemplateTask' in collection_name.split('_')[0]:
                     source = collection_name.split('_')[-2]+'&'+collection_name.split('_')[0].split('&')[-1]
                 else:
                     source = collection_name.split('_')[-2]
-                slices_result[package_id].append({source: {'slice_num':slice_num, 'record_count':record_count, 'feedback_count':feedback_count,
+                slices_result[package_id].append({source: {'slice_num':slice_num, 'record_count':record_count, 'feedback_count':feedback_count,'non_feedback_count':non_feedback_count,
                                 'success_count':success_count, 'fail_count':fail_count, 'total_used_times': total_used_times, 'total_take_times':total_take_times,
-                                'raw_used_times':used_times['total_used_times'], 'task_progress':task_progress, 'task_type':task_type}})
+                                'raw_used_times':used_times['total_used_times'], 'task_progress':task_progress, 'task_type':task_type, 'code_29_total_count': code_29_total_count}})
 
                 per_package_records_count += record_count
             package_count_list[package_id][slice_num] = per_package_records_count
@@ -113,20 +124,30 @@ def update_task_list_in_mysql(task_type):
     sql_list = []
     for package_id, source, source_info in get_source_info(task_type):
         sql_insert = '''replace into task_day_list_monitor (source,package_id,slice_num,frequency,total_generated,
-                      feedback_count,success_count,fail_count,datetime,date,total_take_times,total_used_times,raw_used_times,task_progress,type)
-                      VALUE ("%s",%d,%d,%d,%d,%d,%d,%d,%s,%s,%d,%d,%d,%f,"%s");'''%(source,package_id,source_info['slice_num'],frequency.get(str(package_id)),
-                      source_info['record_count'],source_info['feedback_count'],source_info['success_count'],
+                      feedback_count,non_feedback_count,success_count,fail_count,datetime,date,total_take_times,total_used_times,raw_used_times,task_progress,type,code_29_total_count)
+                      VALUE ("{}",{},{},{},{},{},{},{},{},{},{},{},{},{},{},"{}",{});'''.format(source,package_id,source_info['slice_num'],frequency.get(str(package_id)),
+                      source_info['record_count'],source_info['feedback_count'],source_info['non_feedback_count'], source_info['success_count'],
                       source_info['fail_count'],update_time,update_day,source_info['total_take_times'],
-                      source_info['total_used_times'],source_info['raw_used_times'],source_info['task_progress'],source_info['task_type'])
+                      source_info['total_used_times'],source_info['raw_used_times'],source_info['task_progress'],source_info['task_type'],source_info['code_29_total_count'])
+        # sql_insert = '''replace into task_day_list_monitor (source,package_id,slice_num,frequency,total_generated,
+        #                       feedback_count,success_count,fail_count,datetime,date,total_take_times,total_used_times,raw_used_times,task_progress,type)
+        #                       VALUE ('{}',{},{},{},{},{},{},{},{},{},{},{},{},{},'{}');'''.format(
+        # source, package_id, source_info['slice_num'], frequency.get(str(package_id)),
+        # source_info['record_count'], source_info['feedback_count'],
+        # source_info['success_count'],
+        # source_info['fail_count'], update_time, update_day, source_info['total_take_times'],
+        # source_info['total_used_times'], source_info['raw_used_times'], source_info['task_progress'],
+        # source_info['task_type'])
         sql_list.append(sql_insert)
     #绿皮分package_id不分源的统计
     for task_type, value in package_statistic.items():
         for package_id, package_info in value.items():
             sql_insert = '''replace into task_day_list_monitor (source,package_id,slice_num,frequency,total_generated,
-                      feedback_count,success_count,fail_count,datetime,date,total_take_times,total_used_times,raw_used_times,task_progress,type)
-                      VALUE ('{}',{},{},{},{},{},{},{},{},{},{},{},{},{},'{}');'''.format('',package_id,1000,frequency.get(str(package_id)),
+                      feedback_count,non_feedback_count,success_count,fail_count,datetime,date,total_take_times,total_used_times,raw_used_times,task_progress,type,code_29_total_count)
+                      VALUE ('{}',{},{},{},{},{},{},{},{},{},{},{},{},{},{},'{}',{});'''.format('',package_id,1000,frequency.get(str(package_id)),
                                                                                       package_info['record_count'],
                                                                                       package_info['feedback_count'],
+                                                                                      package_info['non_feedback_count'],
                                                                                       package_info['success_count'],
                                                                                       package_info['fail_count'],
                                                                                       update_time, update_day,
@@ -134,7 +155,8 @@ def update_task_list_in_mysql(task_type):
                                                                                       package_info['total_used_times'],
                                                                                       package_info['raw_used_times'],
                                                                                       package_info['task_progress'],
-                                                                                      task_type)
+                                                                                      task_type,
+                                                                                      package_info['code_29_total_count'])
             sql_list.append(sql_insert)
     update_monitor(conn_pool, sql_list)
 
@@ -153,6 +175,10 @@ def get_source_info(task_type):
                 package_statistic['T' + task_type][package_id]['feedback_count'] = source_info['feedback_count'] + \
                                                                                  package_statistic['T' + task_type][
                                                                                      package_id].get('feedback_count', 0)
+                package_statistic['T' + task_type][package_id]['non_feedback_count'] = source_info['non_feedback_count'] + \
+                                                                                   package_statistic['T' + task_type][
+                                                                                       package_id].get('non_feedback_count',
+                                                                                                       0)
                 package_statistic['T' + task_type][package_id]['success_count'] = source_info['success_count'] + \
                                                                                  package_statistic['T' + task_type][
                                                                                      package_id].get('success_count', 0)
@@ -171,15 +197,20 @@ def get_source_info(task_type):
                 package_statistic['T' + task_type][package_id]['task_progress'] = (package_statistic['T' + task_type][package_id]['success_count']
                                                                                    +package_statistic['T' + task_type][package_id]['fail_count'])\
                                                                                   /package_statistic['T' + task_type][package_id]['record_count']
+                package_statistic['T' + task_type][package_id]['code_29_total_count'] = source_info['code_29_total_count'] + \
+                                                                                   package_statistic['T' + task_type][
+                                                                                       package_id].get('code_29_total_count',
+                                                                                                       0)
                 yield package_id, source, source_info #source_info:任务概览，eg:{'record_count': 32425, 'fail_count': 0, 'feedback_count': 101, 'slice_num': 0, 'success_count': 0}
 
 
 def update_dead_running():
     supervise_time = datetime.datetime.now()+ datetime.timedelta(minutes=-60) #注意此处一定为负数！
     for collection_name in date_task_db.collection_names():
-        date_task_db[collection_name].update({'run': 1, 'update_time': {'$lt': supervise_time}}, {'$inc':{'used_times': 1}}, multi=True)
+        date_task_db[collection_name].update({'run': 1, 'update_time': {'$lt': supervise_time}}, {'$inc':{'used_times': 1, 'non_feedback_times': 1}}, multi=True)
         date_task_db[collection_name].update({'run': 1, 'update_time': {'$lt': supervise_time}},
                                              {'$set': {'run': 0}}, multi=True)
+
 
 def update_error_code_counter(task_type):
     today = datetime.datetime.today().strftime('%Y%m%d')
@@ -218,43 +249,69 @@ def update_error_code_counter(task_type):
         update_code(conn_pool, sql_list)
 
 
+def get_average_success_count(source, package_id, slice_num):
+    sql = '''
+    select 
+    '''
+    count = 0
+    for line in fetchall(task_db_monitor_db_pool, sql=sql):
+        count += line['']
+    average_success_count = count/7
+    return average_success_count
+
+
 if __name__ == '__main__':
     logger.info('开始绿皮的更新：')
-    update_dead_running()
-    logger.info('更新酒店：')
-    slices_result, package_count_list = query_mongo('Hotel')
-    update_package_info_collection(package_count_list)
-    update_task_list_in_mysql('Hotel')
-    logger.info('更新单程飞机：')
-    slices_result, package_count_list = query_mongo('Flight')
-    update_package_info_collection(package_count_list)
-    update_task_list_in_mysql('Flight')
+    supervise_time = datetime.datetime.now()
+    specified_day_str = (datetime.datetime.now()).strftime('%Y-%m-%d') + ' 23:50:00'
+    specified_day_time = datetime.datetime.strptime(specified_day_str, "%Y-%m-%d %H:%M:%S")
+    if supervise_time - specified_day_time > datetime.timedelta(minutes=0):
+        logger.info('规定时间，停止supervise！')
+        raise Exception
+    try:
+        update_dead_running()
+        logger.info('更新酒店：')
+        slices_result, package_count_list = query_mongo('Hotel')
+        update_package_info_collection(package_count_list)
+        update_task_list_in_mysql('Hotel')
+        logger.info('更新单程飞机：')
+        slices_result, package_count_list = query_mongo('Flight')
+        update_package_info_collection(package_count_list)
+        update_task_list_in_mysql('Flight')
 
-    logger.info('更新往返飞机：')
-    slices_result, package_count_list = query_mongo('RoundFlight')
-    update_package_info_collection(package_count_list)
-    update_task_list_in_mysql('RoundFlight')
+        logger.info('更新往返飞机：')
+        slices_result, package_count_list = query_mongo('RoundFlight')
+        update_package_info_collection(package_count_list)
+        update_task_list_in_mysql('RoundFlight')
 
-    logger.info('更新联程飞机：')
-    slices_result, package_count_list = query_mongo('MultiFlight')
-    update_package_info_collection(package_count_list)
-    update_task_list_in_mysql('MultiFlight')
+        logger.info('更新联程飞机：')
+        slices_result, package_count_list = query_mongo('MultiFlight')
+        update_package_info_collection(package_count_list)
+        update_task_list_in_mysql('MultiFlight')
 
-    logger.info('更新火车：')
-    slices_result, package_count_list = query_mongo('Train')
-    update_package_info_collection(package_count_list)
-    update_task_list_in_mysql('Train')
+        logger.info('更新火车：')
+        slices_result, package_count_list = query_mongo('Train')
+        update_package_info_collection(package_count_list)
+        update_task_list_in_mysql('Train')
 
-    logger.info('更新酒店：')
-    update_error_code_counter(task_type=TaskType.Hotel)
-    logger.info('更新往返飞机：')
-    update_error_code_counter(task_type=TaskType.RoundFlight)
-    logger.info('更新单程飞机：')
-    update_error_code_counter(task_type=TaskType.Flight)
-    logger.info('更新联程飞机：')
-    update_error_code_counter(task_type=TaskType.MultiFlight)
-    logger.info('更新火车：')
-    update_error_code_counter(task_type=TaskType.Train)
+        logger.info('渡轮：')
+        slices_result, package_count_list = query_mongo('Ferries')
+        update_package_info_collection(package_count_list)
+        update_task_list_in_mysql('Ferries')
 
-    logger.info('完成本次绿皮更新！')
+        logger.info('更新酒店：')
+        update_error_code_counter(task_type=TaskType.Hotel)
+        logger.info('更新往返飞机：')
+        update_error_code_counter(task_type=TaskType.RoundFlight)
+        logger.info('更新单程飞机：')
+        update_error_code_counter(task_type=TaskType.Flight)
+        logger.info('更新联程飞机：')
+        update_error_code_counter(task_type=TaskType.MultiFlight)
+        logger.info('更新火车：')
+        update_error_code_counter(task_type=TaskType.Train)
+        logger.info('更新渡轮：')
+        update_error_code_counter(task_type=TaskType.Ferries)
 
+        logger.info('完成本次绿皮更新！')
+    except Exception as e:
+        logger.error('raise exception', exc_info=1)

@@ -1,6 +1,7 @@
+import init_path
 from model.TaskType import TaskType
 from rabbitmq.consumer import query_temporary_task
-
+from common.generate_task_utils import today_date
 
 class TempTask():
     def drop_collection(self, date_task_db, today):
@@ -20,7 +21,7 @@ class TempTask():
                 package_id_list.append(package_info.package_id)
         for collection_name in date_task_db.collection_names():
             if 'TemplateTask' in collection_name.split('_')[0]:
-                if collection_name.split('_')[-1] == InsertDateTask.today():
+                if collection_name.split('_')[-1] == today_date(False):
                     for package_id in package_id_list:
                         date_task_db[collection_name].remove({'package_id': package_id})
 

@@ -33,12 +33,12 @@ multi_flight_source = [
 ]
 
 hotel_source = [
+    'agodaListHotel',
+    'elongListHotel',
+    'ctripListHotel',
     'expediaListHotel',
     'hotelsListHotel',
-    'bookingListHotel',
-    'elongListHotel',
-    'agodaListHotel',
-    'ctripListHotel'
+    'bookingListHotel'
 ]
 
 train_source = [
@@ -49,7 +49,7 @@ bus_source = [
 ]
 
 ferries_source = [
-    'directListFerry'
+    'DirectFerryRoutine'
 ]
 
 # error_code_list = {_0_: 0,

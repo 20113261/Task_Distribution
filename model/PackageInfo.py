@@ -54,17 +54,17 @@ class PackageInfo(object):
             package_id = int(line['id'])
             task_type = TaskType.parse_str(line['taskType'])
             update_cycle = line['update_cycle']
-            # if package_id >= 0:
-            package = PackageId(
-                package_id=package_id,
-                task_type=task_type,
-                update_cycle=update_cycle,
-                start_date=line['daydiff_start'],
-                end_date=line['daydiff_end'],
-                slice_num=line['slice'],
-                next_slice=line.get('next_slice')
-            )
-            __dict[task_type].append(package)
+            if package_id >= 0:
+                package = PackageId(
+                    package_id=package_id,
+                    task_type=task_type,
+                    update_cycle=update_cycle,
+                    start_date=line['daydiff_start'],
+                    end_date=line['daydiff_end'],
+                    slice_num=line['slice'],
+                    next_slice=line.get('next_slice')
+                )
+                __dict[task_type].append(package)
         # sort dict
         for k in __dict.keys():
             __dict[k] = sorted(__dict[k])
@@ -78,7 +78,7 @@ class PackageInfo(object):
         for line in self.collection.find({'id': package_obj.package_id}):
             current_slice_num = line['slice']
         slice_num = current_slice_num + 1 if current_slice_num < total_slice_num else current_slice_num
-        if slice_num == total_slice_num:
+        if slice_num >= total_slice_num:
             slice_num = 0
         self.collection.update({'id': package_obj.package_id}, {'$set': {'slice': slice_num}})
 

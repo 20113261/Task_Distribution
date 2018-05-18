@@ -5,17 +5,16 @@ import datetime
 import math
 import time
 import traceback
-from rabbitmq.consumer import connect_rabbitmq
 from collections import defaultdict
-# from rabbitmq.mongo_data import receive_mongo_data
 from functools import partial
-from pika import channel
-from conf.config import used_times_config
+from conf.config import used_times_config, used_times_by_source as _used_times_by_source, used_times_specified as _used_times_specified
 from logger_file import get_logger
 from model.TaskType import TaskType
 
 logger = get_logger('producter')
 
+used_times_specified = _used_times_specified
+used_times_by_source = _used_times_by_source
 
 # total_task_level_dict = {}
 # collection_task_level = {}
@@ -24,21 +23,23 @@ logger = get_logger('producter')
 # collection_advance_dict = {}
 # date_list = []
 
-def init_variable():
+def init_variable(_task_type):
     global total_task_level_dict
     global collection_task_level
     global level_dict
     global distribute_result
     global collection_advance_dict
     global date_list
+    global task_type
     total_task_level_dict = {}
     collection_task_level = {}
     level_dict = defaultdict(list)
     distribute_result = defaultdict(dict)
     collection_advance_dict = {}
     date_list = []
+    task_type = _task_type
 
-def yesterday_advance(task_type):
+def yesterday_advance():
     date_set = set()
     global date_list
     global collection_advance_dict
@@ -59,7 +60,7 @@ def yesterday_advance(task_type):
     for i in range(len(date_list)):
         date_list[i] = date_list[i].strftime('%Y%m%d')
 
-def first_calculate_step(task_type):
+def first_calculate_step():
     '''
     :return:
     per_level_dict为各个package_id下未完结的文档数量，eg:{12: 310724, 13: 747187, 14: 725389}
@@ -83,7 +84,7 @@ def first_calculate_step(task_type):
                         continue
                     if task_type != type:
                         continue
-                    data_count = pika_send.date_task_db[collection_name].find({'package_id':package_id, 'run':0, 'used_times': {'$lt': used_times_config}, 'finished': 0}).count() #此条件注意
+                    data_count = pika_send.date_task_db[collection_name].find({'package_id':package_id, 'run':0, 'used_times': {'$lt': used_times_by_source[task_type]}, 'finished': 0}).count() #此条件注意
                     level[collection_name] = data_count
                     per_level_count += data_count
                 total_count += per_level_count
@@ -125,7 +126,7 @@ def first_calculate_step(task_type):
 #     return total_count, per_level_dict, level_dict
 
 
-def second_calculate_step(total_count, task_type):
+def second_calculate_step(total_count):
     '''
     :param total_count:
     :return: per_share_count为计算出的每五分钟的入队数量
@@ -143,12 +144,14 @@ def second_calculate_step(total_count, task_type):
     print('---------second_calculate_step---------')
     print(time_shares, shares, per_share_count)
 
-    if task_type!='Train' and per_share_count < 3000: #包括per_share_count <= 0
+    if task_type not in ['Train', 'Ferries'] and per_share_count < 3000: #包括per_share_count <= 0
         return 3000
     elif task_type in ['RoundFlight', 'MultiFlight'] and per_share_count < 5000:
         return 5000
     elif task_type=='Train' and per_share_count < 40:
         return 40
+    elif task_type=='Ferries' and per_share_count < 2:
+        return 2
     return per_share_count
 
 def third_calculate_step(per_share_count, per_level):
@@ -230,8 +233,8 @@ def fourth_calculate_step(distribute_result, per_level_dict, level_dict):
                         count = math.ceil(number * value[date] / level_count) #注意value错误
                         #如果数量超过一定值，则规定最大值
                         if 'Hotel' in collection_name:
-                            if count > 10000:
-                                count = 10000
+                            if count > 20000:
+                                count = 20000
                         else:
                             if count > 20000:
                                 count = 20000
@@ -269,10 +272,12 @@ def fourth_calculate_step(distribute_result, per_level_dict, level_dict):
 def final_distribute(task_type):
     task_type = str(task_type).split('.')[-1]
     logger.info('start producter:**************{}'.format(task_type))
-    init_variable()
-    yesterday_advance(task_type)
-    total_count, per_level_dict, level_dict = first_calculate_step(task_type)
-    per_share_count = second_calculate_step(total_count, task_type)
+    logger.info('used_times_by_source:{}'.format(used_times_by_source[task_type]))
+    init_variable(task_type)
+    yesterday_advance()
+    total_count, per_level_dict, level_dict = first_calculate_step()
+    update_start_reproduct(total_count)
+    per_share_count = second_calculate_step(total_count)
     per_level = sorted(per_level_dict.items(), key=lambda d: d[0])
     distribute_result = third_calculate_step(per_share_count, per_level)  # per_share_count, per_level_dict
     logger.info('distribute_result:{}'.format(distribute_result))
@@ -280,11 +285,12 @@ def final_distribute(task_type):
     return fourth_calculate_step(distribute_result, per_level_dict, level_dict)
 
 
-def insert_mongo_data(source, collection_name, mongo_tuple_list):
+def insert_mongo_data(source, collection_name, mongo_tuple_list, task_type):
     # for collection_name, mongo_tuple_list in final_distribute_result.items():
+    task_type = str(task_type).split('.')[-1]
     if source in collection_name:
         for mongo_tuple in mongo_tuple_list:
-            cursor = pika_send.date_task_db[collection_name].find({'package_id': mongo_tuple[0], 'run': 0, 'used_times': {'$lt': used_times_config}, 'finished': 0}).limit(mongo_tuple[1])
+            cursor = pika_send.date_task_db[collection_name].find({'package_id': mongo_tuple[0], 'run': 0, 'used_times': {'$lt': used_times_by_source[task_type]}, 'finished': 0}).limit(mongo_tuple[1])
             yield from cursor
 
 
@@ -292,14 +298,30 @@ def update_running(collection_name, tid, value):
     update_time = datetime.datetime.now()
     pika_send.date_task_db[collection_name].update({'tid': tid}, {'$set': {'run': value, 'update_time': update_time}})
 
+
 def from_list_get_count(date, data_list:list):
     for one_data_dict in data_list:
         if date in one_data_dict.keys():
             return one_data_dict[date]
 
+
+def update_start_reproduct(total_count):
+    global used_times_by_source
+    product_time = datetime.datetime.now()
+    specified_day_str = (datetime.datetime.now()).strftime('%Y-%m-%d') + ' 00:00:00'
+    specified_day_time = datetime.datetime.strptime(specified_day_str, "%Y-%m-%d %H:%M:%S")
+    diff_time = product_time - specified_day_time
+    if diff_time >= datetime.timedelta(minutes=0) and diff_time < datetime.timedelta(minutes=120):
+        used_times_by_source[task_type] = used_times_config
+    #todo 调式
+    elif used_times_by_source[task_type] == used_times_config and total_count == 0:
+        used_times_by_source[task_type] = used_times_specified
+        logger.info('update start')
+
+
 if __name__ == '__main__':
 
     # final_distribute = final_distribute('Hotel')
-    final_distribute = final_distribute(TaskType.Train)
+    final_distribute = final_distribute(TaskType.Hotel)
 
     print(final_distribute)

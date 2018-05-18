@@ -17,17 +17,19 @@ add_city_id ='''['60677']'''
 logger = get_logger('test2')
 
 # host = 'localhost:123456'
-host = '10.10.239.46:12345'
+# host = '10.10.239.46:12345'
+host = '10.10.110.74:123456'
+
 # url = 'http://localhost:12345/workload'
 # requests.get(url)
 for i in range(1000):
     url = 'http://{host}/workload'.format(host=host)
     try:
-        # res = requests.get(url, params={'data_type': "Rail_Bus", 'count': 5}, timeout=60).text  #config.per_retrieve_count
+        res = requests.get(url, params={'data_type': "RoundFlight", 'count': 1}, timeout=60).text  #config.per_retrieve_count
         # res = requests.get(url, params={'data_type': "Flight", 'count':1}, timeout=60).text  #config.per_retrieve_count
         # url = 'http://{}/template_workload?type=Flight&city_id={}&number={}'.format(host, add_city_id,10002)
-        number = 10005
-        res = requests.post('http://10.10.239.46:12345/template_workload', data={'type':'Hotel', 'city_id': add_city_id, 'number': number})
+        # number = 10005
+        # res = requests.post('http://10.10.239.46:12345/template_workload', data={'type':'Hotel', 'city_id': add_city_id, 'number': number})
 
         res = eval(res)
         result = []

@@ -25,10 +25,9 @@ from tornado.options import define
 from conf import config, task_source
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
-from rabbitmq.consumer import ExampleConsumer
 from rabbitmq.producter import final_distribute, insert_mongo_data, update_running
 from logger_file import get_logger
-from rabbitmq.consumer import connect_rabbitmq, insert_spider_result, feed_back_date_task, slave_take_times, task_temporary_monitor, query_temporary_task
+from rabbitmq.consumer import insert_spider_result, feed_back_date_task, slave_take_times, task_temporary_monitor, query_temporary_task
 from model.TaskType import TaskType
 from common.InsertDateTask import InsertDateTask
 from common.InsertBaseTask import InsertBaseTask
@@ -44,11 +43,11 @@ class Executor(ThreadPoolExecutor):
 
     def __new__(cls, *args, **kwargs):
         if not getattr(cls, '_instance', None):
-            cls._instance = ThreadPoolExecutor(max_workers=30)
+            cls._instance = ThreadPoolExecutor(max_workers=args[0])
         return cls._instance
 
 class GetTask(tornado.web.RequestHandler):
-    executor = Executor()
+    executor = Executor(51)
 
     @tornado.web.asynchronous
     @tornado.gen.coroutine
@@ -69,20 +68,25 @@ class GetTask(tornado.web.RequestHandler):
 
     @tornado.concurrent.run_on_executor
     def async_get(self, request_count):
+        source_list = []
         source_count_dict = {}
-        if self.data_type == 'ListHotel':
-            source_list = task_source.hotel_source
-        elif self.data_type == 'RoundFlight':
-            source_list = task_source.round_flight_source
-        elif self.data_type == 'Flight':
-            source_list = task_source.flight_source
-        elif self.data_type == 'RoundFlight_MultiFlight':
-            source_list = task_source.round_flight_source
-            source_list.extend(task_source.multi_flight_source)
-        elif self.data_type == 'Rail_Bus':
-            source_list = task_source.train_source
-        else:
-            return []
+
+        data_types = self.data_type.split('_')
+        for data_type in data_types:
+            if data_type == 'ListHotel':
+                source_list.extend(task_source.hotel_source)
+            elif data_type == 'RoundFlight':
+                source_list.extend(task_source.round_flight_source)
+            elif data_type == 'Flight':
+                source_list.extend(task_source.flight_source)
+            elif data_type == 'MultiFlight':
+                source_list.extend(task_source.multi_flight_source)
+            elif data_type == 'Rail':
+                source_list.extend(task_source.train_source)
+            elif data_type == 'Ferry':
+                source_list.extend(task_source.ferries_source)
+            else:
+                source_list.extend([])
         for source in source_list:
             try:
                 redis_count = r.llen(source)
@@ -96,16 +100,20 @@ class GetTask(tornado.web.RequestHandler):
         request_count = math.ceil(float(request_count / len(source_count_dict)))
         for source, redis_count in source_count_dict.items():
             take_count = request_count if redis_count > request_count else redis_count
-            lrange_end = take_count -1
-            take_value = r.lrange(source, 0, lrange_end)
-            for value in take_value:
-                self.response.append(eval(value))
-            r.ltrim(source, take_count, redis_count)
+            for i in range(take_count-1):
+                content = r.lpop(source)
+                if content:
+                    self.response.append(eval(content))
+            # lrange_end = take_count -1
+            # take_value = r.lrange(source, 0, lrange_end)
+            # for value in take_value:
+            #     self.response.append(eval(value))
+            # r.ltrim(source, take_count, redis_count) 此处是bug,注意别用！
         return self.response
 
 
 class FeedBack(tornado.web.RequestHandler):
-    executor = ThreadPoolExecutor(20)
+    executor = ThreadPoolExecutor(50)
 
     @tornado.web.asynchronous
     @tornado.gen.coroutine
@@ -180,7 +188,8 @@ application = tornado.web.Application([
 # os.popen('requirepass 123')
 # os.popen('redis-cli shutdown')
 # os.popen('redis-server &')
-r = redis.Redis(host='10.10.180.145', port=6379,  decode_responses=True, db=10)
+pool = redis.ConnectionPool(host='10.10.180.145', port=6379,  decode_responses=True, db=10)
+r = redis.Redis(connection_pool=pool)
 
 def publish_content(task_type):
     final_distribute_result = final_distribute(task_type)
@@ -195,7 +204,7 @@ def publish_content(task_type):
         if len_source < 1000:
             logger.info('{}数量{}少于1000，开始进行补给。'.format(source, len_source))
             for collection_name, mongo_tuple_list in final_distribute_result.items():
-                for line in insert_mongo_data(source, collection_name, mongo_tuple_list):
+                for line in insert_mongo_data(source, collection_name, mongo_tuple_list, task_type):
                     if task_type == TaskType.RoundFlight:
                         content = line['task_args']['content'] + line['date']  # 注意往返飞机要拼接上日期，酒店不用
                     elif task_type == TaskType.MultiFlight:
@@ -214,8 +223,9 @@ def publish_content(task_type):
                             "timeslot": 208, "update_times": 0, "workload_key": workload_key,
                             "used_times": line['used_times'], "take_times": line['take_times'],
                             "suggest": line['task_args']['suggest'],
-                            "suggest_type": line['task_args']['suggest_type'], "city_id": line['task_args']['city_id'],
-                            "tid": line['tid'], "collection_name": line['collection_name'], "feedback_times":line['feedback_times']}
+                            "suggest_type": line['task_args']['suggest_type'],
+                            "tid": line['tid'], "collection_name": line['collection_name'], "feedback_times":line['feedback_times'],
+                            "ticket_info": line['task_args']['ticket_info']}
                         # if 'DateTask_Hotel_' in collection_name:
                         #     logger.info(data)
                         # else:
@@ -239,10 +249,12 @@ if __name__ == '__main__':
     http_server = tornado.httpserver.HTTPServer(application)
     http_server.bind(12345, '0.0.0.0')
     http_server.start()
-    tornado.ioloop.PeriodicCallback(partial(publish_content, TaskType.Hotel), 250000).start()
+    #todo 18:43  roundflight 100000,ferries 300000, Hotel 180000
+    tornado.ioloop.PeriodicCallback(partial(publish_content, TaskType.Hotel), 180000).start()
     tornado.ioloop.PeriodicCallback(partial(publish_content, TaskType.Flight), 200000).start()
     tornado.ioloop.PeriodicCallback(partial(publish_content, TaskType.RoundFlight), 100000).start()
     tornado.ioloop.PeriodicCallback(partial(publish_content, TaskType.MultiFlight), 220000).start()
     tornado.ioloop.PeriodicCallback(partial(publish_content, TaskType.Train), 500000).start()
+    tornado.ioloop.PeriodicCallback(partial(publish_content, TaskType.Ferries), 300000).start()
     ioloop = tornado.ioloop.IOLoop.instance()
     ioloop.start()
