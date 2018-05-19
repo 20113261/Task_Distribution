@@ -17,15 +17,15 @@ add_city_id ='''['60677']'''
 logger = get_logger('test2')
 
 # host = 'localhost:123456'
-# host = '10.10.239.46:12345'
-host = '10.10.110.74:123456'
+host = '10.10.239.46:12345'
+# host = '10.10.110.74:123456'
 
 # url = 'http://localhost:12345/workload'
 # requests.get(url)
 for i in range(1000):
     url = 'http://{host}/workload'.format(host=host)
     try:
-        res = requests.get(url, params={'data_type': "RoundFlight", 'count': 1}, timeout=60).text  #config.per_retrieve_count
+        res = requests.get(url, params={'data_type': "MultiFlight", 'count': 1}, timeout=60).text  #config.per_retrieve_count
         # res = requests.get(url, params={'data_type': "Flight", 'count':1}, timeout=60).text  #config.per_retrieve_count
         # url = 'http://{}/template_workload?type=Flight&city_id={}&number={}'.format(host, add_city_id,10002)
         # number = 10005
@@ -48,7 +48,7 @@ for i in range(1000):
         # result = []
         # for i in range(2):
             # result.extend(result1)
-        requests.post('http://{host}/complete_workload'.format(host=host), data={'q': str(result)})
+        # requests.post('http://{host}/complete_workload'.format(host=host), data={'q': str(result)})
         # requests.get('http://{}{}'.format(host, param))
 
         print(i+1)

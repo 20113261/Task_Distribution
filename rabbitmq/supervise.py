@@ -25,6 +25,7 @@ package_statistic = {}
 update_time = datetime.datetime.now().strftime('%Y%m%d%H') + '00'
 update_day = datetime.datetime.now().strftime('%Y%m%d')
 today = datetime.datetime.today().strftime('%Y%m%d')
+avg_res = {}
 
 def query_mongo(task_type):
     '''
@@ -65,6 +66,9 @@ def query_mongo(task_type):
                 # fail_count = record_count - success_count
                 fail_count = date_task_db[collection_name].find({'package_id': package_id, 'slice_num': slice_num, 'finished': 0, 'used_times': {'$gte': used_times_config}}).count()
 
+                avg_success_count = avg_res[(collection_name.split('_')[-2], package_id)][0]
+                avg_fail_count = avg_res[(collection_name.split('_')[-2], package_id)][1]
+
                 task_progress = (success_count + fail_count) / record_count
 
                 used_count = date_task_db[collection_name].find({'package_id': package_id, 'slice_num': slice_num, 'used_times': {'$gte': 1}}).count()
@@ -81,7 +85,8 @@ def query_mongo(task_type):
                     source = collection_name.split('_')[-2]
                 slices_result[package_id].append({source: {'slice_num':slice_num, 'record_count':record_count, 'feedback_count':feedback_count,'non_feedback_count':non_feedback_count,
                                 'success_count':success_count, 'fail_count':fail_count, 'total_used_times': total_used_times, 'total_take_times':total_take_times,
-                                'raw_used_times':used_times['total_used_times'], 'task_progress':task_progress, 'task_type':task_type, 'code_29_total_count': code_29_total_count}})
+                                'raw_used_times':used_times['total_used_times'], 'task_progress':task_progress, 'task_type':task_type, 'code_29_total_count': code_29_total_count,
+                                'avg_success_count': avg_success_count, 'avg_fail_count': avg_fail_count}})
 
                 per_package_records_count += record_count
             package_count_list[package_id][slice_num] = per_package_records_count
@@ -124,11 +129,13 @@ def update_task_list_in_mysql(task_type):
     sql_list = []
     for package_id, source, source_info in get_source_info(task_type):
         sql_insert = '''replace into task_day_list_monitor (source,package_id,slice_num,frequency,total_generated,
-                      feedback_count,non_feedback_count,success_count,fail_count,datetime,date,total_take_times,total_used_times,raw_used_times,task_progress,type,code_29_total_count)
-                      VALUE ("{}",{},{},{},{},{},{},{},{},{},{},{},{},{},{},"{}",{});'''.format(source,package_id,source_info['slice_num'],frequency.get(str(package_id)),
+                      feedback_count,non_feedback_count,success_count,fail_count,datetime,date,total_take_times,total_used_times,raw_used_times,task_progress,type,code_29_total_count, 
+                      avg_success_count, avg_fail_count)
+                      VALUE ("{}",{},{},{},{},{},{},{},{},{},{},{},{},{},{},"{}",{},{},{});'''.format(source,package_id,source_info['slice_num'],frequency.get(str(package_id)),
                       source_info['record_count'],source_info['feedback_count'],source_info['non_feedback_count'], source_info['success_count'],
                       source_info['fail_count'],update_time,update_day,source_info['total_take_times'],
-                      source_info['total_used_times'],source_info['raw_used_times'],source_info['task_progress'],source_info['task_type'],source_info['code_29_total_count'])
+                      source_info['total_used_times'],source_info['raw_used_times'],source_info['task_progress'],source_info['task_type'],source_info['code_29_total_count'],
+                      source_info['avg_success_count'], source_info['avg_fail_count'])
         # sql_insert = '''replace into task_day_list_monitor (source,package_id,slice_num,frequency,total_generated,
         #                       feedback_count,success_count,fail_count,datetime,date,total_take_times,total_used_times,raw_used_times,task_progress,type)
         #                       VALUE ('{}',{},{},{},{},{},{},{},{},{},{},{},{},{},'{}');'''.format(
@@ -143,8 +150,9 @@ def update_task_list_in_mysql(task_type):
     for task_type, value in package_statistic.items():
         for package_id, package_info in value.items():
             sql_insert = '''replace into task_day_list_monitor (source,package_id,slice_num,frequency,total_generated,
-                      feedback_count,non_feedback_count,success_count,fail_count,datetime,date,total_take_times,total_used_times,raw_used_times,task_progress,type,code_29_total_count)
-                      VALUE ('{}',{},{},{},{},{},{},{},{},{},{},{},{},{},{},'{}',{});'''.format('',package_id,1000,frequency.get(str(package_id)),
+                      feedback_count,non_feedback_count,success_count,fail_count,datetime,date,total_take_times,total_used_times,raw_used_times,task_progress,type,code_29_total_count,
+                      avg_success_count, avg_fail_count)
+                      VALUE ('{}',{},{},{},{},{},{},{},{},{},{},{},{},{},{},'{}',{},{},{});'''.format('',package_id,1000,frequency.get(str(package_id)),
                                                                                       package_info['record_count'],
                                                                                       package_info['feedback_count'],
                                                                                       package_info['non_feedback_count'],
@@ -156,7 +164,9 @@ def update_task_list_in_mysql(task_type):
                                                                                       package_info['raw_used_times'],
                                                                                       package_info['task_progress'],
                                                                                       task_type,
-                                                                                      package_info['code_29_total_count'])
+                                                                                      package_info['code_29_total_count'],
+                                                                                      package_info['avg_success_count'],
+                                                                                      package_info['avg_fail_count'])
             sql_list.append(sql_insert)
     update_monitor(conn_pool, sql_list)
 
@@ -201,6 +211,13 @@ def get_source_info(task_type):
                                                                                    package_statistic['T' + task_type][
                                                                                        package_id].get('code_29_total_count',
                                                                                                        0)
+                package_statistic['T' + task_type][package_id]['avg_success_count'] = source_info['avg_success_count'] + \
+                                                                                        package_statistic['T' + task_type][
+                                                                                            package_id].get('avg_success_count',0)
+                package_statistic['T' + task_type][package_id]['avg_fail_count'] = source_info['avg_fail_count'] + \
+                                                                                      package_statistic['T' + task_type][
+                                                                                          package_id].get('avg_fail_count', 0)
+
                 yield package_id, source, source_info #source_info:任务概览，eg:{'record_count': 32425, 'fail_count': 0, 'feedback_count': 101, 'slice_num': 0, 'success_count': 0}
 
 
@@ -213,10 +230,10 @@ def update_dead_running():
 
 
 def update_error_code_counter(task_type):
-    today = datetime.datetime.today().strftime('%Y%m%d')
+    # today = datetime.datetime.today().strftime('%Y%m%d')
     from conn_pool import task_db_monitor_db_pool
     conn_pool = task_db_monitor_db_pool
-    today = datetime.datetime.today().strftime('%Y%m%d')
+    # today = datetime.datetime.today().strftime('%Y%m%d')
     task_type = str(task_type).split('.')[-1]
     source_list = TaskType.get_source_list(str(task_type).split('.')[-1])
     sql_list = []
@@ -249,15 +266,21 @@ def update_error_code_counter(task_type):
         update_code(conn_pool, sql_list)
 
 
-def get_average_success_count(source, package_id, slice_num):
+def get_average_success_count():
+    global avg_res
+    date_list = set()
+    for i in range(0, 7):
+        date_list.add((datetime.datetime.now() + datetime.timedelta(days=-i)).strftime('%Y%m%d'))
+    date_list = str(date_list).replace('{', '(')
+    date_list = str(date_list).replace('}', ')')
     sql = '''
-    select 
-    '''
+    select source, package_id, avg(success_count), avg(fail_count) from task_day_list_monitor where date in {} group by source,package_id
+    '''.format(date_list)
     count = 0
     for line in fetchall(task_db_monitor_db_pool, sql=sql):
-        count += line['']
-    average_success_count = count/7
-    return average_success_count
+        count += 1
+        avg_res[(line[0], line[1])] = (line[2], line[3])
+    return avg_res
 
 
 if __name__ == '__main__':
@@ -270,6 +293,7 @@ if __name__ == '__main__':
         raise Exception
     try:
         update_dead_running()
+        get_average_success_count()
         logger.info('更新酒店：')
         slices_result, package_count_list = query_mongo('Hotel')
         update_package_info_collection(package_count_list)

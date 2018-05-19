@@ -133,8 +133,14 @@ def second_calculate_step(total_count):
     '''
     now_time = datetime.datetime.now()
     # next_day_str = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime('%Y-%m-%d') + ' 00:00:00'
-    next_day_str = (datetime.datetime.now()).strftime('%Y-%m-%d') + ' 21:00:00'
-    next_day = datetime.datetime.strptime(next_day_str,"%Y-%m-%d %H:%M:%S")
+    if used_times_by_source[task_type] == used_times_config:
+        next_day_str = (datetime.datetime.now()).strftime('%Y-%m-%d') + ' 20:00:00'
+        next_day = datetime.datetime.strptime(next_day_str,"%Y-%m-%d %H:%M:%S")
+        logger.info('used_times_by_source:{}, up_to_time:{}'.format(used_times_by_source[task_type], next_day_str))
+    else:
+        next_day_str = (datetime.datetime.now()).strftime('%Y-%m-%d') + ' 23:00:00'
+        next_day = datetime.datetime.strptime(next_day_str, "%Y-%m-%d %H:%M:%S")
+        logger.info('used_times_by_source:{}, up_to_time:{}'.format(used_times_by_source[task_type], next_day_str))
     # print(next_day)
 
     # print(datetime.datetime.strptime("2018-02-03 00:00:00","%Y-%m-%d %H:%M:%S").strftime('%Y-%m-%d %H:%M:%S'))
@@ -272,7 +278,6 @@ def fourth_calculate_step(distribute_result, per_level_dict, level_dict):
 def final_distribute(task_type):
     task_type = str(task_type).split('.')[-1]
     logger.info('start producter:**************{}'.format(task_type))
-    logger.info('used_times_by_source:{}'.format(used_times_by_source[task_type]))
     init_variable(task_type)
     yesterday_advance()
     total_count, per_level_dict, level_dict = first_calculate_step()
