@@ -46,10 +46,10 @@ def feed_back_date_task(result):
             used_times = task_info['used_times'] + 1
             feedback_times = task_info['feedback_times'] + 1
             if task_info['error'] == 0:
-                pika_send.date_task_db[task_info['collection_name']].update({'tid': task_info['tid']}, {'$set': {'finished': 1,
+                pika_send.date_task_db[task_info['collection_name']].update({'tid': task_info['tid'], 'finished': 0}, {'$set': {'finished': 1,
                     'run': 0, 'used_times': used_times, 'feedback_times': feedback_times, 'error_code': task_info['error']}})
             else:
-                pika_send.date_task_db[task_info['collection_name']].update({'tid': task_info['tid']}, {'$set': {'run': 0,
+                pika_send.date_task_db[task_info['collection_name']].update({'tid': task_info['tid'], 'finished': 0}, {'$set': {'run': 0,
                     'used_times': used_times, 'feedback_times': feedback_times, 'error_code': task_info['error']}})
             # if task_info['error'] == 0:
             #     pika_send.date_task_db[task_info['collection_name']].update({'tid': task_info['tid']}, {'$set': {'finished': 1, 'run': 0, 'used_times': used_times}})
@@ -88,3 +88,6 @@ def query_temporary_task():
         query_list.append((row[0], row[1]))
     return query_list
 
+def stop_temporary_task(number):
+    sql = '''delete from task_temporary_monitor where number={};'''.format(number)
+    update_monitor(task_db_monitor_db_pool, sql_list=[sql])

@@ -9,5 +9,5 @@ if __name__ == '__main__':
     # insert_task = InsertBaseTask(task_type=TaskType.TempHotel, temporary_city_str=add_city_id, number=10006)
     # insert_task.insert_task()
 
-    insert_task = InsertBaseTask(task_type=TaskType.Ferries)
+    insert_task = InsertBaseTask(task_type=TaskType.Flight)
     insert_task.insert_task()

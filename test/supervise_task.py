@@ -2,7 +2,6 @@ from rabbitmq.supervise import query_mongo, update_package_info_collection, upda
 from model.TaskType import TaskType
 
 if __name__ == '__main__':
-    get_average_success_count()
 
     slices_result, package_count_list = query_mongo('Hotel')
     update_package_info_collection(package_count_list)

@@ -20,6 +20,7 @@ class TaskType(enum.IntEnum):
     TempHotel = 7
     TempTrain = 8
     Ferries = 9
+    TempFerries = 10
 
     @staticmethod
     def parse_str(string):
@@ -33,7 +34,8 @@ class TaskType(enum.IntEnum):
                 'bus': TaskType.Bus,
                 'tempflight': TaskType.TempFlight,
                 'temphotel': TaskType.TempHotel,
-                'ferries': TaskType.Ferries
+                'ferries': TaskType.Ferries,
+                'tempferries': TaskType.TempFerries
             }
 
             _res = str_name.get(string.lower())
@@ -67,7 +69,8 @@ class TaskType(enum.IntEnum):
             'RoundFlight': task_source.round_flight_source,
             'MultiFlight': task_source.multi_flight_source,
             'Train': task_source.train_source,
-            'Ferries': task_source.ferries_source
+            'Ferries': task_source.ferries_source,
+            'TempFerries': task_source.ferries_source
         }
         if isinstance(string, str):
             _res = source_list.get(string)

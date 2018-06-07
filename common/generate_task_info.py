@@ -30,7 +30,7 @@ def get_rank_result(sql):
             tri_code = row[5]
             if city_id in each_rank:
                 if int(inner_order) > 0:
-                    if int(each_rank[city_id]['inner_order']) < 0 or int(inner_order) < int(
+                    if int(each_rank[city_id]['inner_order']) < 0 or int(inner_order) > int(
                             each_rank[city_id]['inner_order']):
                         each_rank[city_id]['iata_code'] = iata_code
                         each_rank[city_id]['inner_order'] = inner_order
@@ -190,7 +190,7 @@ WHERE (city.id = airport.belong_city_id) AND airport.status = 'Open' AND city.co
             tri_code = row[5]
             if city_id in each_rank:
                 if int(inner_order) > 0:
-                    if int(each_rank[city_id]['inner_order']) < 0 or int(inner_order) < int(
+                    if int(each_rank[city_id]['inner_order']) < 0 or int(inner_order) > int(
                             each_rank[city_id]['inner_order']):
                         each_rank[city_id]['iata_code'] = iata_code
                         each_rank[city_id]['inner_order'] = inner_order
@@ -296,6 +296,8 @@ def generate_round_flight_base_task_info():
     for each_rank, each_rank_sql in rank_list:
         for row in fetchall(base_data_pool, each_rank_sql):
             iata_code = row[0]
+            if iata_code in ['NAY', 'PEK']:
+                print(row)
             inner_order = row[1]
             city_id = row[2]
             continent_id = row[3]
@@ -303,7 +305,7 @@ def generate_round_flight_base_task_info():
             tri_code = row[5]
             if city_id in each_rank:
                 if int(inner_order) > 0:
-                    if int(each_rank[city_id]['inner_order']) < 0 or int(inner_order) < int(
+                    if int(each_rank[city_id]['inner_order']) < 0 or int(inner_order) > int(
                             each_rank[city_id]['inner_order']):
                         each_rank[city_id]['iata_code'] = iata_code
                         each_rank[city_id]['inner_order'] = inner_order

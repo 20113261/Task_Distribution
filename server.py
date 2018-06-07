@@ -27,7 +27,7 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from rabbitmq.producter import final_distribute, insert_mongo_data, update_running
 from logger_file import get_logger
-from rabbitmq.consumer import insert_spider_result, feed_back_date_task, slave_take_times, task_temporary_monitor, query_temporary_task
+from rabbitmq.consumer import insert_spider_result, feed_back_date_task, slave_take_times, task_temporary_monitor, query_temporary_task, stop_temporary_task
 from model.TaskType import TaskType
 from common.InsertDateTask import InsertDateTask
 from common.InsertBaseTask import InsertBaseTask
@@ -147,7 +147,7 @@ class TemplateWork(tornado.web.RequestHandler):
         elif task_type == 'Train':
             self.task_type = TaskType.TempTrain
         else:
-            self.write('无此类型！')
+            self.write('type类型有误！')
             self.finish()
         city_id_list = self.get_argument('city_id', '[]').strip()
         number = self.get_argument('number', 0).strip()
@@ -156,14 +156,18 @@ class TemplateWork(tornado.web.RequestHandler):
             self.write('无批次号！')
             self.finish()
 
-        response = yield tornado.gen.Task(self.async_get, city_id_list, number)
-        if response:
-            self.write('生成任务完毕！')
-            task_temporary_monitor(self.task_type, number)
-
+        operate = self.get_argument('operate', '')
+        if operate == 'insert':
+            response = yield tornado.gen.Task(self.async_get, city_id_list, number, operate)
+            if response:
+                self.write('生成任务完毕！')
+                task_temporary_monitor(self.task_type, number)
+        elif operate == 'stop':
+            self.write('删除任务完毕！')
+            stop_temporary_task(number)
 
     @tornado.gen.coroutine
-    def async_get(self, city_id_list, number):
+    def async_get(self, city_id_list, number, operate):
         query_list = query_temporary_task()
         if (str(self.task_type).split('.')[-1], number) in query_list:
             self.write('已发过此类型的此批次号数据！')
@@ -172,9 +176,7 @@ class TemplateWork(tornado.web.RequestHandler):
         insert_task.insert_task()
         insert_date_task = InsertDateTask(task_type=self.task_type, number=number, routine=False)
         insert_date_task.insert_task()
-
         return True
-
 
 application = tornado.web.Application([
     (r'/workload', GetTask),
@@ -247,7 +249,7 @@ def publish_content(task_type):
 
 if __name__ == '__main__':
     http_server = tornado.httpserver.HTTPServer(application)
-    http_server.bind(12345, '0.0.0.0')
+    http_server.bind(123456, '0.0.0.0')
     http_server.start()
     #todo 18:43  roundflight 100000,ferries 300000, Hotel 180000
     tornado.ioloop.PeriodicCallback(partial(publish_content, TaskType.Hotel), 120000).start()

@@ -134,7 +134,7 @@ def second_calculate_step(total_count):
     now_time = datetime.datetime.now()
     # next_day_str = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime('%Y-%m-%d') + ' 00:00:00'
     if used_times_by_source[task_type] == used_times_config:
-        next_day_str = (datetime.datetime.now()).strftime('%Y-%m-%d') + ' 20:00:00'
+        next_day_str = (datetime.datetime.now()).strftime('%Y-%m-%d') + ' 20:30:00'
         next_day = datetime.datetime.strptime(next_day_str,"%Y-%m-%d %H:%M:%S")
         logger.info('used_times_by_source:{}, up_to_time:{}'.format(used_times_by_source[task_type], next_day_str))
     else:
@@ -144,7 +144,7 @@ def second_calculate_step(total_count):
     # print(next_day)
 
     # print(datetime.datetime.strptime("2018-02-03 00:00:00","%Y-%m-%d %H:%M:%S").strftime('%Y-%m-%d %H:%M:%S'))
-    shares = (next_day - datetime.datetime.now()).total_seconds()/60/5
+    shares = (next_day - datetime.datetime.now()).total_seconds()/60/4
     time_shares = math.floor(shares)
     per_share_count = math.ceil(total_count/time_shares)
     print('---------second_calculate_step---------')

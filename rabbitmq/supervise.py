@@ -283,6 +283,8 @@ def get_average_success_count():
     return avg_res
 
 
+get_average_success_count()
+
 if __name__ == '__main__':
     logger.info('开始绿皮的更新：')
     supervise_time = datetime.datetime.now()
@@ -293,7 +295,6 @@ if __name__ == '__main__':
         raise Exception
     try:
         update_dead_running()
-        get_average_success_count()
         logger.info('更新酒店：')
         slices_result, package_count_list = query_mongo('Hotel')
         update_package_info_collection(package_count_list)

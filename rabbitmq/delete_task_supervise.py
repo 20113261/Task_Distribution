@@ -6,7 +6,7 @@ from conf import config
 from collections import defaultdict
 from mysql_execute import update_monitor
 from logger_file import get_logger
-from rabbitmq.supervise import get_source_info, update_dead_running, query_mongo
+from rabbitmq.supervise import get_source_info, update_dead_running, query_mongo, get_average_success_count
 from logger_file import get_logger
 from model.TaskType import TaskType
 from rabbitmq.pika_send import date_task_db

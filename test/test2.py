@@ -21,7 +21,7 @@ host = '10.10.239.46:12345'
 # host = '10.10.110.74:123456'
 
 # url = 'http://localhost:12345/workload'
-# requests.get(url)
+res = requests.post('http://10.10.239.46:123456/template_workload',data={'number':555, 'operate':'stop', 'type':'Flight'})
 for i in range(1000):
     url = 'http://{host}/workload'.format(host=host)
     try:
