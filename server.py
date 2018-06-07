@@ -249,7 +249,7 @@ def publish_content(task_type):
 
 if __name__ == '__main__':
     http_server = tornado.httpserver.HTTPServer(application)
-    http_server.bind(123456, '0.0.0.0')
+    http_server.bind(12345, '0.0.0.0')
     http_server.start()
     #todo 18:43  roundflight 100000,ferries 300000, Hotel 180000
     tornado.ioloop.PeriodicCallback(partial(publish_content, TaskType.Hotel), 120000).start()
